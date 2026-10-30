@@ -118,16 +118,19 @@ export default function TerminalPage() {
       if (leadRes.ok) {
         const leadData = await leadRes.json();
         const serverPlayers: Player[] = leadData.players || [];
+        const resetAt = Number(leadData.reset_at || 0);
         setPlayers(serverPlayers);
         setRecentSolves(leadData.recent_solves || []);
 
-        // Jos peli on nollattu palvelimella eikä localStoragessa olevaa pelaajaa enää löydy, kirjaudutaan ulos
-        if (typeof window !== 'undefined') {
+        // Jos admin on nollannut pelin tämän pelaajan kirjautumisen JÄLKEEN, kirjaudutaan ulos
+        if (typeof window !== 'undefined' && resetAt > 0) {
           const storedId = localStorage.getItem('varila_player_id');
-          if (storedId && !serverPlayers.some((p) => p.id === storedId)) {
+          const loginAt = Number(localStorage.getItem('varila_login_at') || 0);
+          if (storedId && resetAt > loginAt) {
             localStorage.removeItem('varila_player_id');
             localStorage.removeItem('varila_player_name');
             localStorage.removeItem('varila_player_pin');
+            localStorage.removeItem('varila_login_at');
             setActivePlayerId(null);
             setActivePlayerName('');
             setPlayerAttempts([]);
@@ -173,8 +176,12 @@ export default function TerminalPage() {
   };
 
   const handlePlayerRegistered = (player: Player) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('varila_login_at', String(Date.now()));
+    }
     setActivePlayerId(player.id);
     setActivePlayerName(player.name);
+    setPlayers((prev) => (prev.some((p) => p.id === player.id) ? prev : [...prev, player]));
     setRegistrationOpen(false);
     showNotification(`Tervetuloa tutkintaan, ${player.name}!`, 'success');
     fetchData();

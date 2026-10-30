@@ -62,6 +62,7 @@ export const PlayerRegistrationModal: React.FC<Props> = ({
           localStorage.setItem('varila_player_id', data.player.id);
           localStorage.setItem('varila_player_name', data.player.name);
           localStorage.setItem('varila_player_pin', cleanPin);
+          localStorage.setItem('varila_login_at', String(Date.now()));
         }
         onRegistered(data.player);
       } else {

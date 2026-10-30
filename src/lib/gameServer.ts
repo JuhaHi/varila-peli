@@ -63,30 +63,65 @@ export function computeRelativeNodeScores(
   return result;
 }
 
-// In-Memory Database for local dev & serverless fallback
-class InMemoryGameDatabase {
-  public nodes: GameNode[] = JSON.parse(JSON.stringify(INITIAL_NODES));
-  public players: Player[] = JSON.parse(JSON.stringify(INITIAL_PLAYERS));
-  public attempts: TaskAttempt[] = [];
+interface SharedMemoryState {
+  nodes: GameNode[];
+  players: Player[];
+  attempts: TaskAttempt[];
+  resetAt: number;
+}
 
-  constructor(existing?: { nodes?: GameNode[]; players?: Player[]; attempts?: TaskAttempt[] }) {
-    if (existing) {
-      if (existing.nodes) {
-        this.nodes = INITIAL_NODES.map((initNode) => {
-          const prev = existing.nodes?.find((n) => n.node_key === initNode.node_key);
-          return prev
-            ? {
-                ...initNode,
-                is_active: prev.is_active,
-                unlocked_at: prev.unlocked_at,
-              }
-            : { ...initNode };
-        });
-      }
-      if (existing.players) this.players = existing.players;
-      if (existing.attempts) this.attempts = existing.attempts;
-      this.recalculateAllScores();
-    }
+const globalForGame = globalThis as unknown as {
+  __varilaSharedState?: SharedMemoryState;
+  inMemoryDb?: { nodes?: GameNode[]; players?: Player[]; attempts?: TaskAttempt[] };
+};
+
+if (!globalForGame.__varilaSharedState) {
+  const prevNodes = globalForGame.inMemoryDb?.nodes;
+  globalForGame.__varilaSharedState = {
+    nodes: INITIAL_NODES.map((initNode) => {
+      const prev = prevNodes?.find((n) => n.node_key === initNode.node_key);
+      return prev
+        ? {
+            ...initNode,
+            is_active: prev.is_active,
+            unlocked_at: prev.unlocked_at,
+          }
+        : { ...initNode };
+    }),
+    players: globalForGame.inMemoryDb?.players || JSON.parse(JSON.stringify(INITIAL_PLAYERS)),
+    attempts: globalForGame.inMemoryDb?.attempts || [],
+    resetAt: 0,
+  };
+}
+
+// In-Memory Database for local dev & serverless fallback (all route bundles share __varilaSharedState)
+class InMemoryGameDatabase {
+  public get nodes(): GameNode[] {
+    return globalForGame.__varilaSharedState!.nodes;
+  }
+  public set nodes(val: GameNode[]) {
+    globalForGame.__varilaSharedState!.nodes = val;
+  }
+
+  public get players(): Player[] {
+    return globalForGame.__varilaSharedState!.players;
+  }
+  public set players(val: Player[]) {
+    globalForGame.__varilaSharedState!.players = val;
+  }
+
+  public get attempts(): TaskAttempt[] {
+    return globalForGame.__varilaSharedState!.attempts;
+  }
+  public set attempts(val: TaskAttempt[]) {
+    globalForGame.__varilaSharedState!.attempts = val;
+  }
+
+  public get resetAt(): number {
+    return globalForGame.__varilaSharedState!.resetAt;
+  }
+  public set resetAt(val: number) {
+    globalForGame.__varilaSharedState!.resetAt = val;
   }
 
   public recalculateAllScores(): void {
@@ -345,7 +380,7 @@ class InMemoryGameDatabase {
         };
       });
 
-    return { players, recent_solves: recentSolves };
+    return { players, recent_solves: recentSolves, reset_at: this.resetAt } as LeaderboardData;
   }
 
   public getPlayerAttempts(playerId: string): TaskAttempt[] {
@@ -354,16 +389,15 @@ class InMemoryGameDatabase {
   }
 
   public resetAll() {
-    this.nodes = JSON.parse(JSON.stringify(INITIAL_NODES));
-    this.players = [];
-    this.attempts = [];
+    this.nodes.splice(0, this.nodes.length, ...JSON.parse(JSON.stringify(INITIAL_NODES)));
+    this.players.splice(0, this.players.length);
+    this.attempts.splice(0, this.attempts.length);
+    this.resetAt = Date.now();
   }
 }
 
-// Global in-memory singleton (re-instantiates on HMR to pick up updated methods while preserving state)
-const globalForGame = global as unknown as { inMemoryDb?: InMemoryGameDatabase };
-export const inMemoryDb = new InMemoryGameDatabase(globalForGame.inMemoryDb as any);
-if (process.env.NODE_ENV !== 'production') globalForGame.inMemoryDb = inMemoryDb;
+export const inMemoryDb = new InMemoryGameDatabase();
+globalForGame.inMemoryDb = inMemoryDb;
 
 // ==========================================
 // UNIFIED CONTROLLERS (SUPABASE + MEMORY FALLBACK)
