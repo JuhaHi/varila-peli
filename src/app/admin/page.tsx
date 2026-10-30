@@ -198,7 +198,7 @@ export default function AdminPage() {
               .filter((a) => a.is_completed)
               .reduce((sum, a) => sum + (a.awarded_points || 0), 0);
             const p = knownPlayersMap.get(pid);
-            if (p && totalScore > (p.total_score || 0)) {
+            if (p && p.total_score === undefined) {
               p.total_score = totalScore;
             }
           }

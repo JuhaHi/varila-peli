@@ -157,11 +157,11 @@ export default function TerminalPage() {
             localStorage.setItem(`varila_attempts_${pid}`, JSON.stringify(validAtt));
           }
           allAttempts.push(...validAtt);
-          const totalScore = validAtt
-            .filter((a) => a.is_completed)
-            .reduce((sum, a) => sum + (a.awarded_points || 0), 0);
           const p = knownPlayersMap.get(pid);
-          if (p && totalScore > (p.total_score || 0)) {
+          if (p && p.total_score === undefined) {
+            const totalScore = validAtt
+              .filter((a) => a.is_completed)
+              .reduce((sum, a) => sum + (a.awarded_points || 0), 0);
             p.total_score = totalScore;
           }
         }
@@ -236,6 +236,31 @@ export default function TerminalPage() {
         const serverPlayers: Player[] = leadData.players || [];
         setPlayers(serverPlayers);
         setRecentSolves(leadData.recent_solves || []);
+
+        // Synkronoidaan palvelimen laskemat suhteelliset pisteet aktiivisen pelaajan suorituksiin
+        if (activePlayerId && Array.isArray(leadData.recent_solves)) {
+          setPlayerAttempts((prev) => {
+            let changed = false;
+            const updated = prev.map((att) => {
+              if (att.player_id !== activePlayerId) return att;
+              const serverMatch = leadData.recent_solves.find(
+                (s: TaskAttempt) =>
+                  s.player_id === activePlayerId &&
+                  s.node_key.toUpperCase() === att.node_key.toUpperCase() &&
+                  s.is_completed
+              );
+              if (serverMatch && serverMatch.awarded_points !== undefined && serverMatch.awarded_points !== att.awarded_points) {
+                changed = true;
+                return { ...att, awarded_points: serverMatch.awarded_points };
+              }
+              return att;
+            });
+            if (changed && typeof window !== 'undefined') {
+              localStorage.setItem(`varila_attempts_${activePlayerId}`, JSON.stringify(updated));
+            }
+            return updated;
+          });
+        }
       }
     } catch (err) {
       console.error('Fetch error:', err);
@@ -430,12 +455,12 @@ export default function TerminalPage() {
       );
       if (!existing) {
         map.set(lp.id, { ...lp });
-      } else if ((lp.total_score || 0) > (existing.total_score || 0)) {
-        existing.total_score = lp.total_score;
       }
     }
     if (activePlayerId && activePlayerName) {
-      const existing = map.get(activePlayerId);
+      const existing = Array.from(map.values()).find(
+        (x) => x.id === activePlayerId || x.name.toLowerCase() === activePlayerName.toLowerCase()
+      );
       if (!existing) {
         map.set(activePlayerId, {
           id: activePlayerId,
@@ -443,8 +468,6 @@ export default function TerminalPage() {
           total_score: activePlayerLocalScore,
           created_at: new Date().toISOString(),
         });
-      } else if (activePlayerLocalScore > (existing.total_score || 0)) {
-        existing.total_score = activePlayerLocalScore;
       }
     }
     return Array.from(map.values()).sort((a, b) => b.total_score - a.total_score);

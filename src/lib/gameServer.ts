@@ -492,8 +492,6 @@ class InMemoryGameDatabase {
             total_score: cp.total_score || 0,
             created_at: cp.created_at || new Date().toISOString(),
           });
-        } else if ((cp.total_score || 0) > (existing.total_score || 0)) {
-          existing.total_score = cp.total_score;
         }
       }
     }
@@ -1035,8 +1033,6 @@ export async function getLeaderboard(
           );
           if (!existing) {
             mergedPlayerMap.set(mp.id, mp);
-          } else if (mp.total_score > existing.total_score) {
-            existing.total_score = mp.total_score;
           }
         }
 
