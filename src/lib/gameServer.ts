@@ -312,6 +312,20 @@ class InMemoryGameDatabase {
     return { success: true, node };
   }
 
+  public updateNodeVideo(nodeKey: string, videoUrl: string, adminPin: string): { success: boolean; error?: string; node?: GameNode } {
+    if (adminPin !== ADMIN_PIN) {
+      return { success: false, error: 'Virheellinen Admin PIN-koodi.' };
+    }
+
+    const node = this.getNode(nodeKey);
+    if (!node) {
+      return { success: false, error: 'Tehtävää ei löydy.' };
+    }
+
+    node.video_url = videoUrl.trim();
+    return { success: true, node };
+  }
+
   public getLeaderboard(): LeaderboardData {
     this.recalculateAllScores();
     const players = this.getPlayers();
@@ -663,6 +677,40 @@ export async function handleToggleNode(
   return inMemoryDb.toggleNode(cleanKey, isActive, adminPin);
 }
 
+export async function handleUpdateNodeVideo(
+  nodeKey: string,
+  videoUrl: string,
+  adminPin: string
+): Promise<{ success: boolean; error?: string; node?: GameNode }> {
+  if (adminPin !== ADMIN_PIN) {
+    return { success: false, error: 'Virheellinen Admin PIN-koodi.' };
+  }
+
+  const cleanKey = nodeKey.trim().toUpperCase();
+  const cleanUrl = videoUrl.trim();
+  const sb = getSupabaseServerClient();
+
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from('game_nodes')
+        .update({ video_url: cleanUrl })
+        .eq('node_key', cleanKey)
+        .select()
+        .single();
+
+      if (!error && data) {
+        inMemoryDb.updateNodeVideo(cleanKey, cleanUrl, adminPin);
+        return { success: true, node: data };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return inMemoryDb.updateNodeVideo(cleanKey, cleanUrl, adminPin);
+}
+
 export async function getGameNodes(includeSecrets = false): Promise<GameNode[]> {
   const sb = getSupabaseServerClient();
   if (sb) {
@@ -675,6 +723,14 @@ export async function getGameNodes(includeSecrets = false): Promise<GameNode[]> 
       if (!error && data && data.length > 0) {
         return (data as unknown as GameNode[]).map((node) => {
           const copy = { ...node };
+          if (
+            !copy.video_url ||
+            copy.video_url.includes('pub-xxx.r2.dev') ||
+            copy.video_url.includes('pub-xxxxxx.r2.dev')
+          ) {
+            const fallback = INITIAL_NODES.find((n) => n.node_key === copy.node_key);
+            if (fallback) copy.video_url = fallback.video_url;
+          }
           if (!includeSecrets) {
             delete copy.secret_code;
           }

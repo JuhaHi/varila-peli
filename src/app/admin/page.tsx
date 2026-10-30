@@ -18,6 +18,9 @@ import {
   ArrowLeft,
   Copy,
   Check,
+  Film,
+  Upload,
+  Save,
 } from 'lucide-react';
 import { GameNode, Player, TaskAttempt } from '@/lib/types';
 import { soundFX } from '@/lib/audio';
@@ -32,6 +35,9 @@ export default function AdminPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [videoDrafts, setVideoDrafts] = useState<Record<string, string>>({});
+  const [uploadingNode, setUploadingNode] = useState<string | null>(null);
+  const [previewNode, setPreviewNode] = useState<string | null>(null);
 
   // Load stored PIN if any
   useEffect(() => {
@@ -131,7 +137,7 @@ export default function AdminPage() {
     soundFX.playKeyClick();
     const host = typeof window !== 'undefined' ? window.location.host : '';
     const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
-    const message = `⚠️ HÄLYTYS: Uusi Värilä-anomalia havaittu!\n\nTehtävä "${node.title}" (${node.target_person}) on nyt avattu päätelaitteille ratkottavaksi!\n\nAvaa arkisto heti osoitteessa: ${protocol}//${host}`;
+    const message = `⚠️ HÄLYTYS: Uusi Värilä-anomalia havaittu!\n\nTehtävä "${node.title}" on nyt avattu päätelaitteille ratkottavaksi!\n\nAvaa arkisto heti osoitteessa: ${protocol}//${host}`;
     const shareUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(shareUrl, '_blank');
   };
@@ -140,10 +146,78 @@ export default function AdminPage() {
     soundFX.playKeyClick();
     const host = typeof window !== 'undefined' ? window.location.host : '';
     const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
-    const message = `⚠️ HÄLYTYS: Uusi Värilä-anomalia havaittu! Tehtävä "${node.title}" (${node.target_person}) on avattu päätteelle: ${protocol}//${host}`;
+    const message = `⚠️ HÄLYTYS: Uusi Värilä-anomalia havaittu! Tehtävä "${node.title}" on avattu päätteelle: ${protocol}//${host}`;
     navigator.clipboard.writeText(message);
     setCopiedKey(node.node_key);
     setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  const handleSaveVideoUrl = async (nodeKey: string, currentUrl: string) => {
+    const newUrl = (videoDrafts[nodeKey] ?? currentUrl).trim();
+    if (!newUrl) return;
+    soundFX.playKeyClick();
+    setUploadingNode(nodeKey);
+    try {
+      const res = await fetch('/api/admin/upload-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeKey, videoUrl: newUrl, adminPin }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        soundFX.playSuccess();
+        setNodes((prev) =>
+          prev.map((n) => (n.node_key === nodeKey ? { ...n, video_url: data.videoUrl } : n))
+        );
+        setActionMessage(`Tehtävän ${nodeKey} videopolku tallennettu: ${data.videoUrl}`);
+        setTimeout(() => setActionMessage(null), 4000);
+      } else {
+        soundFX.playFailure();
+        alert(data.error || 'Videopolun tallennus epäonnistui.');
+      }
+    } catch {
+      soundFX.playFailure();
+      alert('Yhteysvirhe tallennettaessa videopolkua.');
+    } finally {
+      setUploadingNode(null);
+    }
+  };
+
+  const handleUploadVideoFile = async (nodeKey: string, file?: File | null) => {
+    if (!file) return;
+    soundFX.playKeyClick();
+    setUploadingNode(nodeKey);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('nodeKey', nodeKey);
+      formData.append('adminPin', adminPin);
+
+      const res = await fetch('/api/admin/upload-video', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        soundFX.playSuccess();
+        setNodes((prev) =>
+          prev.map((n) => (n.node_key === nodeKey ? { ...n, video_url: data.videoUrl } : n))
+        );
+        setVideoDrafts((prev) => ({ ...prev, [nodeKey]: data.videoUrl }));
+        setActionMessage(
+          `Video ladattu tehtävälle ${nodeKey} -> ${data.videoUrl} (muista git push jos julkaiset Verceliin)`
+        );
+        setTimeout(() => setActionMessage(null), 5000);
+      } else {
+        soundFX.playFailure();
+        alert(data.error || 'Videotiedoston lataus epäonnistui.');
+      }
+    } catch {
+      soundFX.playFailure();
+      alert('Yhteysvirhe videotiedoston latauksessa.');
+    } finally {
+      setUploadingNode(null);
+    }
   };
 
   const handleResetGame = async () => {
@@ -368,6 +442,77 @@ export default function AdminPage() {
                         💡 {node.role_hint}
                       </div>
                     )}
+
+                    {/* Video Management Row */}
+                    <div className="pt-2 mt-2 border-t border-[#25e24c]/20 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Film className="w-3.5 h-3.5 text-[#25e24c] shrink-0" />
+                        <span className="text-[11px] font-bold text-[#25e24c]">Video:</span>
+                        <input
+                          type="text"
+                          value={videoDrafts[node.node_key] ?? node.video_url ?? ''}
+                          onChange={(e) =>
+                            setVideoDrafts((prev) => ({
+                              ...prev,
+                              [node.node_key]: e.target.value,
+                            }))
+                          }
+                          placeholder="/videos/node01.mp4 tai https://pub-xxx.r2.dev/..."
+                          className="flex-1 min-w-[210px] bg-black/80 border border-[#25e24c]/40 rounded px-2.5 py-1 text-xs text-[#e0ffe5] font-mono focus:outline-none focus:border-[#25e24c]"
+                        />
+                        <button
+                          type="button"
+                          disabled={uploadingNode === node.node_key}
+                          onClick={() => handleSaveVideoUrl(node.node_key, node.video_url)}
+                          className="bg-[#162a19] hover:bg-[#1f3d24] text-[#86efac] border border-[#25e24c]/50 text-[11px] font-bold px-2.5 py-1 rounded flex items-center gap-1 transition disabled:opacity-50"
+                          title="Tallenna videon osoite"
+                        >
+                          <Save className="w-3 h-3" />
+                          <span>Tallenna URL</span>
+                        </button>
+
+                        <label className="cursor-pointer bg-[#1e293b] hover:bg-[#334155] text-sky-300 border border-sky-500/50 text-[11px] font-bold px-2.5 py-1 rounded flex items-center gap-1 transition">
+                          <Upload className="w-3 h-3" />
+                          <span>
+                            {uploadingNode === node.node_key ? 'Ladataan...' : 'Valitse MP4 koneelta'}
+                          </span>
+                          <input
+                            type="file"
+                            accept="video/mp4,video/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadVideoFile(node.node_key, f);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPreviewNode((prev) =>
+                              prev === node.node_key ? null : node.node_key
+                            )
+                          }
+                          className="bg-black/60 hover:bg-black text-amber-300 border border-amber-500/40 text-[11px] px-2.5 py-1 rounded transition"
+                        >
+                          {previewNode === node.node_key ? 'Sulje esikatselu' : '▶ Esikatsele'}
+                        </button>
+                      </div>
+
+                      {previewNode === node.node_key && (
+                        <div className="bg-black rounded-lg p-2 border border-[#25e24c]/30 max-w-md">
+                          <video
+                            src={videoDrafts[node.node_key] ?? node.video_url}
+                            controls
+                            autoPlay
+                            playsInline
+                            className="w-full aspect-video rounded bg-black object-contain"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Right: Actions */}
