@@ -25,6 +25,107 @@ import {
 import { GameNode, Player, TaskAttempt } from '@/lib/types';
 import { soundFX } from '@/lib/audio';
 
+const ADMIN_SOLUTION_GUIDE: Record<
+  string,
+  {
+    steps: { label: string; answer: string }[];
+    acceptedCodes: string[];
+    tip?: string;
+  }
+> = {
+  'NODE-01': {
+    steps: [
+      { label: 'Vaihe 1 – Hammasratasparin välityssuhde (i)', answer: '3 (lasku: z₂ / z₁ = 54 / 18 = 3)' },
+      { label: 'Vaihe 2 – Pääakselin vääntömomentti (M₂)', answer: '382 Nm (lasku: 3 × 127.33 Nm = 382 Nm)' },
+    ],
+    acceptedCodes: ['382NM', '382'],
+    tip: 'Voiteluöljyläikkä peittää hammasluvut z₁ = 18 ja z₂ = 54. Pyyhi läikkä sormella tai paina "Puhdista öljyläikkä".',
+  },
+  'NODE-02': {
+    steps: [
+      { label: 'Mustetahrat (UV-lampulla)', answer: 'Tahra I (Kaura): 154.20 | Tahra II (Siemenvilja): 203.35 | Tahra III: Tase-ero = Debet − Kredit' },
+      { label: 'Vaihe 1 – Debet-sarake yhteensä', answer: '854.70 (lasku: 420.00 + 280.50 + 154.20)' },
+      { label: 'Vaihe 2 – Kredit-sarake yhteensä', answer: '711.85 (lasku: 310.00 + 198.50 + 203.35)' },
+      { label: 'Vaihe 3 – Kappalaisen kavaltama tase-erotus', answer: '142.85 (lasku: 854.70 − 711.85)' },
+    ],
+    acceptedCodes: ['142.85', '142,85'],
+    tip: 'Pelaaja voi napauttaa suoraan tahrarivejä tai painaa "Paljasta kaikki 3 mustetahraa kerralla".',
+  },
+  'NODE-03': {
+    steps: [
+      { label: 'Vaihe 1 – Akselin kierrekoko (leveys 48 mm)', answer: 'M48 (48 mm)' },
+      { label: 'Vaihe 2 – Höyrypaineen taso', answer: '12 bar (Nuoramoisten nousu 1888)' },
+    ],
+    acceptedCodes: ['AKSELI-48-1888', 'LAKKO-1905', 'M48-12BAR'],
+    tip: 'Valitse kahdesta pudotusvalikosta M48 ja 12 bar, jolloin salakoodi AKSELI-48-1888 täyttyy automaattisesti.',
+  },
+  'NODE-04': {
+    steps: [
+      { label: 'Vaihe 1 – Korjattu suuntapiiru', answer: '135 (lasku: 180° − 45° = 135° Kaakko)' },
+      { label: 'Vaihe 2 – Kokonaismatka kätkölle (m)', answer: '460 (lasku: 280 + 125 + 55 = 460 m)' },
+    ],
+    acceptedCodes: ['PIONEERI-460', '460'],
+    tip: 'Laske kolmen marssiosuuden metrit yhteen (280 + 125 + 55 = 460).',
+  },
+  'NODE-05': {
+    steps: [
+      { label: 'Vaihe 1 – Valittavat 2 kuumeharhaa', answer: '19. lokakuuta (kirkontorni käveli) JA 32. lokakuuta (elohopeavesi)' },
+      { label: 'Vaihe 2 – 3 todellisen merkinnän päivien summa', answer: '65 (lasku: 12 + 24 + 29 = 65)' },
+    ],
+    acceptedCodes: ['HARHA-1888', '1888'],
+    tip: 'Merkitse harhoiksi vain 19.10. ja 32.10. Todelliset päivät ovat 12.10., 24.10. ja 29.10.',
+  },
+  'NODE-06': {
+    steps: [
+      { label: 'Vaihe 1 – Lämpimän turvapaikan esine (1 sana)', answer: 'LEIVINUUNI (Renkituvan leivinuuni, +28 °C)' },
+      { label: 'Vaihe 2 – Turvahuoneen numero (keskiarvo)', answer: '18 (lasku: (14 + 22) / 2 = 18)' },
+    ],
+    acceptedCodes: ['LEIVINUUNI-18', 'SYSMA-61.42-1888', '61.42'],
+    tip: 'Myös pelkkä "UUNI" tai "RENKITUPA" hyväksytään 1. vaiheen kenttään.',
+  },
+  'NODE-07': {
+    steps: [
+      { label: 'Vaihe 1 – Valeriana officinalis (XVIII)', answer: '18 (tippaa)' },
+      { label: 'Vaihe 2 – Mentha piperita (VIII)', answer: '8 (tippaa)' },
+      { label: 'Vaihe 3 – Spiritus Vini Fortis (LXXXVIII)', answer: '88 (%)' },
+      { label: 'Vaihe 4 – Neutraloiva vasta-aineluku', answer: '70 (lasku: 88 − 18 = 70)' },
+    ],
+    acceptedCodes: ['ROHDOS-70', 'TINKTUURA-1888'],
+    tip: 'Roomalaiset numerot: XVIII = 18, VIII = 8, LXXXVIII = 88. Vasta-aine = 88 − 18 = 70.',
+  },
+  'NODE-08': {
+    steps: [
+      { label: 'Vaihe 1 – 5. silmukan lankaväri (symmetrinen)', answer: 'Krappipunainen (Pun-Pellava-Pun-❖-Pun-Pellava-Pun)' },
+      { label: 'Vaihe 2 – Aloitussilmukat yhteensä (4 × 16)', answer: '64' },
+      { label: 'Vaihe 3 – Kantalapun silmukat (puikot I ja IV kavennuksen jälkeen)', answer: '24 (lasku: (16 − 4) + (16 − 4) = 12 + 12 = 24)' },
+    ],
+    acceptedCodes: ['SILMUKKA-24', 'KATE-24', '24'],
+    tip: 'Puikoilla I ja IV on aluksi 16 silmukkaa kummallakin. Kun molemmilta kavennetaan 4 silmukkaa, jää 12 + 12 = 24.',
+  },
+  'NODE-09': {
+    steps: [
+      { label: 'Vaihe 1 – Tasapainomittarin pito vihreällä (42–58 %)', answer: 'Pidä 4.0 sekunnin ajan kallistamalla ⬅️ Vasemmalle / Oikealle ➡️' },
+    ],
+    acceptedCodes: ['STUNT-VAKAUS'],
+    tip: 'Jos mittari karkaa vasemmalle (< 50 %), paina Oikealle (+8 %). Jos se karkaa oikealle (> 50 %), paina Vasemmalle (−8 %).',
+  },
+  'NODE-10': {
+    steps: [
+      { label: 'Vaihe 1 – Kerää kaikki 3 kirvestä (🪓) ja mene pokaalille (🏆)', answer: 'Reitti: Alas → Alas → Oikealle → Oikealle → Alas → Oikealle' },
+    ],
+    acceptedCodes: ['KIRVES-CHAMP'],
+    tip: 'Ruudukko: (0,0)🟢 → (1,0)🪓 → (2,0) → (2,1)🪓 → (2,2) → (3,2)🪓 → (3,3)🏆. Varo esteitä 🛑!',
+  },
+  'NODE-11': {
+    steps: [
+      { label: 'Vaihe 1 – Valitse kaikki märät lätäköt (💦)', answer: 'Valitse kaikki 7 vesilätäkköä (älä valitse porraskiveä 🪨 tai kynnysmattoa 🟫)' },
+      { label: 'Vaihe 2 – Lätäköiden kokonaismäärä', answer: '7' },
+    ],
+    acceptedCodes: ['7', 'VARILA-SINETTI-1888'],
+    tip: 'Ruudukossa on 9 kohtaa: 7 märkää lätäkköä (💦) ja 2 kuivaa estettä (Nro 3 porraskivi ja Nro 7 kynnysmatto).',
+  },
+};
+
 export default function AdminPage() {
   const [adminPin, setAdminPin] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -587,6 +688,50 @@ export default function AdminPage() {
                     {node.role_hint && (
                       <div className="text-[11px] text-[#e0ffe5]/70 italic">
                         💡 {node.role_hint}
+                      </div>
+                    )}
+
+                    {/* Pelinjohtajan ratkaisuopas & välivaiheet */}
+                    {ADMIN_SOLUTION_GUIDE[node.node_key] && (
+                      <div className="mt-2 bg-black/75 border border-amber-500/40 rounded-lg p-3 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 pb-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                            📋 Pelinjohtajan oikeat vastaukset & välivaiheet
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] text-amber-200/70">Hyväksytyt loppukoodit:</span>
+                            {ADMIN_SOLUTION_GUIDE[node.node_key].acceptedCodes.map((code) => (
+                              <code
+                                key={code}
+                                className="bg-amber-950/80 border border-amber-500/50 text-amber-200 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold"
+                              >
+                                {code}
+                              </code>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+                          {ADMIN_SOLUTION_GUIDE[node.node_key].steps.map((step, sIdx) => (
+                            <div
+                              key={sIdx}
+                              className="bg-[#0b130c] border border-[#25e24c]/25 rounded px-2.5 py-1.5 text-xs"
+                            >
+                              <div className="text-[10px] text-[#25e24c]/75 font-semibold">
+                                {step.label}:
+                              </div>
+                              <div className="text-white font-mono font-bold mt-0.5">
+                                {step.answer}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {ADMIN_SOLUTION_GUIDE[node.node_key].tip && (
+                          <div className="text-[11px] text-amber-200/80 pt-0.5">
+                            🧭 <strong>Vinkki pelaajalle:</strong> {ADMIN_SOLUTION_GUIDE[node.node_key].tip}
+                          </div>
+                        )}
                       </div>
                     )}
 
