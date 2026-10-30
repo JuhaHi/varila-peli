@@ -16,7 +16,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const data = await getLeaderboard(body.players, body.attempts);
+    const data = await getLeaderboard(body.players, body.attempts, body.resetAt);
     return NextResponse.json(data);
   } catch (error) {
     console.error('Leaderboard sync error:', error);

@@ -104,14 +104,26 @@ export default function TerminalPage() {
 
   // Helper to collect local players & attempts for serverless sync
   const getLocalSyncPayload = useCallback(() => {
-    if (typeof window === 'undefined') return { players: [], attempts: [] };
+    if (typeof window === 'undefined') return { players: [], attempts: [], resetAt: 0 };
+    const baseEpoch = new Date('2026-10-30T13:51:30.000Z').getTime();
+    const localReset = Number(localStorage.getItem('varila_reset_at') || 0);
+    const minEpoch = Math.max(baseEpoch, localReset);
+
     const knownPlayersMap = new Map<string, Player>();
     try {
       const rawKnown = localStorage.getItem('varila_known_players');
       if (rawKnown) {
         const parsed: Player[] = JSON.parse(rawKnown);
+        const validKnown: Player[] = [];
         for (const p of parsed) {
-          if (p && p.id && p.name) knownPlayersMap.set(p.id, p);
+          if (!p || !p.id || !p.name) continue;
+          const createdT = p.created_at ? new Date(p.created_at).getTime() : 0;
+          if (createdT && createdT < minEpoch) continue;
+          knownPlayersMap.set(p.id, p);
+          validKnown.push(p);
+        }
+        if (validKnown.length !== parsed.length) {
+          localStorage.setItem('varila_known_players', JSON.stringify(validKnown));
         }
       }
     } catch {
@@ -120,12 +132,13 @@ export default function TerminalPage() {
 
     const storedId = localStorage.getItem('varila_player_id');
     const storedName = localStorage.getItem('varila_player_name');
-    if (storedId && storedName && !knownPlayersMap.has(storedId)) {
+    const loginAt = Number(localStorage.getItem('varila_login_at') || 0);
+    if (storedId && storedName && loginAt >= minEpoch && !knownPlayersMap.has(storedId)) {
       knownPlayersMap.set(storedId, {
         id: storedId,
         name: storedName,
         total_score: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(loginAt).toISOString(),
       });
     }
 
@@ -135,7 +148,14 @@ export default function TerminalPage() {
         const rawAtt = localStorage.getItem(`varila_attempts_${pid}`);
         if (rawAtt) {
           const parsedAtt: TaskAttempt[] = JSON.parse(rawAtt);
-          const validAtt = parsedAtt.filter((a) => a && a.player_id === pid);
+          const validAtt = parsedAtt.filter((a) => {
+            if (!a || a.player_id !== pid) return false;
+            const startT = a.started_at ? new Date(a.started_at).getTime() : 0;
+            return !startT || startT >= minEpoch;
+          });
+          if (validAtt.length !== parsedAtt.length) {
+            localStorage.setItem(`varila_attempts_${pid}`, JSON.stringify(validAtt));
+          }
           allAttempts.push(...validAtt);
           const totalScore = validAtt
             .filter((a) => a.is_completed)
@@ -153,6 +173,7 @@ export default function TerminalPage() {
     return {
       players: Array.from(knownPlayersMap.values()),
       attempts: allAttempts,
+      resetAt: minEpoch,
     };
   }, []);
 
@@ -197,6 +218,21 @@ export default function TerminalPage() {
       }
       if (leadRes.ok) {
         const leadData = await leadRes.json();
+        if (typeof window !== 'undefined' && leadData.reset_at) {
+          const localReset = Number(localStorage.getItem('varila_reset_at') || 0);
+          if (leadData.reset_at > localReset) {
+            localStorage.setItem('varila_reset_at', String(leadData.reset_at));
+            const loginAt = Number(localStorage.getItem('varila_login_at') || 0);
+            if (loginAt && loginAt < leadData.reset_at) {
+              Object.keys(localStorage).forEach((k) => {
+                if (k.startsWith('varila_attempts_') || k === 'varila_known_players') {
+                  localStorage.removeItem(k);
+                }
+              });
+              setPlayerAttempts([]);
+            }
+          }
+        }
         const serverPlayers: Player[] = leadData.players || [];
         setPlayers(serverPlayers);
         setRecentSolves(leadData.recent_solves || []);
@@ -209,14 +245,22 @@ export default function TerminalPage() {
   }, [getLocalSyncPayload]);
 
   const fetchPlayerAttempts = useCallback(async (playerId: string) => {
+    const baseEpoch = new Date('2026-10-30T13:51:30.000Z').getTime();
+    let minEpoch = baseEpoch;
     let localSaved: TaskAttempt[] = [];
     if (typeof window !== 'undefined') {
+      const localReset = Number(localStorage.getItem('varila_reset_at') || 0);
+      if (localReset > minEpoch) minEpoch = localReset;
       try {
         const raw = localStorage.getItem(`varila_attempts_${playerId}`);
         if (raw) {
           const parsed: TaskAttempt[] = JSON.parse(raw);
-          // TÄRKEÄ SUODATUS: Pidä vain tämän pelaajan omat suoritukset (estää edellisen pelaajan suoritusten vuotamisen)
-          localSaved = parsed.filter((a) => a && a.player_id === playerId);
+          // TÄRKEÄ SUODATUS: Pidä vain tämän pelaajan omat JA nollauksen jälkeiset suoritukset
+          localSaved = parsed.filter((a) => {
+            if (!a || a.player_id !== playerId) return false;
+            const startT = a.started_at ? new Date(a.started_at).getTime() : 0;
+            return !startT || startT >= minEpoch;
+          });
           if (localSaved.length !== parsed.length) {
             localStorage.setItem(`varila_attempts_${playerId}`, JSON.stringify(localSaved));
           }

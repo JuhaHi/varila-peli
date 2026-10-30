@@ -50,14 +50,22 @@ export default function AdminPage() {
     const activePin = pinOverride ?? adminPin ?? '';
     const knownPlayersMap = new Map<string, Player>();
     const allAttempts: TaskAttempt[] = [];
+    const baseEpoch = new Date('2026-10-30T13:51:30.000Z').getTime();
+    let minEpoch = baseEpoch;
 
     if (typeof window !== 'undefined') {
+      const localReset = Number(localStorage.getItem('varila_reset_at') || 0);
+      if (localReset > minEpoch) minEpoch = localReset;
+
       try {
         const rawKnown = localStorage.getItem('varila_known_players');
         if (rawKnown) {
           const parsed: Player[] = JSON.parse(rawKnown);
           for (const p of parsed) {
-            if (p && p.id && p.name) knownPlayersMap.set(p.id, p);
+            if (!p || !p.id || !p.name) continue;
+            const createdT = p.created_at ? new Date(p.created_at).getTime() : 0;
+            if (createdT && createdT < minEpoch) continue;
+            knownPlayersMap.set(p.id, p);
           }
         }
       } catch {
@@ -65,12 +73,13 @@ export default function AdminPage() {
       }
       const storedId = localStorage.getItem('varila_player_id');
       const storedName = localStorage.getItem('varila_player_name');
-      if (storedId && storedName && !knownPlayersMap.has(storedId)) {
+      const loginAt = Number(localStorage.getItem('varila_login_at') || 0);
+      if (storedId && storedName && loginAt >= minEpoch && !knownPlayersMap.has(storedId)) {
         knownPlayersMap.set(storedId, {
           id: storedId,
           name: storedName,
           total_score: 0,
-          created_at: new Date().toISOString(),
+          created_at: new Date(loginAt).toISOString(),
         });
       }
       for (const pid of Array.from(knownPlayersMap.keys())) {
@@ -78,7 +87,11 @@ export default function AdminPage() {
           const rawAtt = localStorage.getItem(`varila_attempts_${pid}`);
           if (rawAtt) {
             const parsedAtt: TaskAttempt[] = JSON.parse(rawAtt);
-            const validAtt = parsedAtt.filter((a) => a && a.player_id === pid);
+            const validAtt = parsedAtt.filter((a) => {
+              if (!a || a.player_id !== pid) return false;
+              const startT = a.started_at ? new Date(a.started_at).getTime() : 0;
+              return !startT || startT >= minEpoch;
+            });
             allAttempts.push(...validAtt);
             const totalScore = validAtt
               .filter((a) => a.is_completed)
@@ -103,6 +116,7 @@ export default function AdminPage() {
           body: JSON.stringify({
             players: Array.from(knownPlayersMap.values()),
             attempts: allAttempts,
+            resetAt: minEpoch,
           }),
         }),
       ]);
@@ -336,13 +350,21 @@ export default function AdminPage() {
         body: JSON.stringify({ adminPin }),
       });
       if (res.ok) {
+        const resData = await res.json().catch(() => ({}));
+        const resetTime = resData.resetAt || Date.now();
         soundFX.playSuccess();
         if (typeof window !== 'undefined') {
           Object.keys(localStorage).forEach((k) => {
             if (k.startsWith('varila_')) localStorage.removeItem(k);
           });
+          localStorage.setItem('varila_reset_at', String(resetTime));
         }
-        alert('Peli ja pelaajat alustettu onnistuneesti!');
+        setPlayers([]);
+        setRecentSolves([]);
+        setNodes((prev) =>
+          prev.map((n) => ({ ...n, is_active: false, unlocked_at: null }))
+        );
+        alert('Peli, tehtävät ja pelaajat alustettu onnistuneesti!');
         fetchStats();
       } else {
         const errData = await res.json().catch(() => ({}));

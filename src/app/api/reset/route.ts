@@ -9,7 +9,11 @@ export async function POST(req: Request) {
     if (!result.success) {
       return NextResponse.json(result, { status: 401 });
     }
-    return NextResponse.json({ success: true, message: 'Peli alustettu oletustilaan.' });
+    return NextResponse.json({
+      success: true,
+      resetAt: result.resetAt || Date.now(),
+      message: 'Peli alustettu oletustilaan.',
+    });
   } catch {
     return NextResponse.json({ success: false, error: 'Nollaus epäonnistui.' }, { status: 500 });
   }

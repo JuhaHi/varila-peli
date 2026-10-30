@@ -63,9 +63,9 @@ export function computeRelativeNodeScores(
   return result;
 }
 
-// Aikakynnys (2026-10-30T13:42:00Z), jota vanhemmat avausleimat tulkitaan lukituiksi,
-// jotta kaikki 11 tehtävää ovat varmasti lukittuina pelin alkaessa.
-const INITIAL_LOCK_EPOCH = new Date('2026-10-30T13:42:00.000Z').getTime();
+// Aikakynnys (2026-10-30T13:51:30Z), jota vanhemmat avausleimat ja suoritukset tulkitaan nollatuiksi,
+// jotta kaikki 11 tehtävää ja suoritushistoria ovat puhtaat pelin alkaessa.
+export const INITIAL_LOCK_EPOCH = new Date('2026-10-30T13:51:30.000Z').getTime();
 
 interface NodeOverrideState {
   is_active: boolean;
@@ -140,6 +140,27 @@ class InMemoryGameDatabase {
   }
 
   public recalculateAllScores(): void {
+    const minValidEpoch = Math.max(INITIAL_LOCK_EPOCH, this.resetAt || 0);
+
+    // Siivotaan vanhentuneet pelaajat (luotu ennen viimeisintä nollausta)
+    this.players = this.players.filter((p) => {
+      if (!p || !p.id || !p.name) return false;
+      const createdTime = p.created_at ? new Date(p.created_at).getTime() : 0;
+      return !createdTime || createdTime >= minValidEpoch;
+    });
+
+    const validPlayerIds = new Set(this.players.map((p) => p.id));
+
+    // Siivotaan orvot suoritukset ("Tuntematon") sekä ennen nollausta tehdyt suoritukset
+    this.attempts = this.attempts.filter((a) => {
+      if (!a || !a.player_id || !validPlayerIds.has(a.player_id)) return false;
+      const startT = a.started_at ? new Date(a.started_at).getTime() : 0;
+      const compT = a.completed_at ? new Date(a.completed_at).getTime() : startT;
+      if (startT && startT < minValidEpoch) return false;
+      if (compT && compT < minValidEpoch) return false;
+      return true;
+    });
+
     // Group completed attempts by node_key and recompute relative points (100p fastest .. 10p slowest)
     const nodeKeys = Array.from(
       new Set(this.attempts.filter((a) => a.is_completed).map((a) => a.node_key.toUpperCase()))
@@ -432,24 +453,33 @@ class InMemoryGameDatabase {
     this.recalculateAllScores();
     const players = this.getPlayers();
     const recentSolves = this.attempts
-      .filter((a) => a.is_completed)
+      .filter((a) => a.is_completed && Boolean(this.getPlayer(a.player_id)))
       .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime())
       .slice(0, 30)
       .map((a) => {
-        const p = this.getPlayer(a.player_id);
+        const p = this.getPlayer(a.player_id)!;
         return {
           ...a,
-          player_name: p?.name || 'Tuntematon',
+          player_name: p.name,
         };
       });
 
-    return { players, recent_solves: recentSolves, reset_at: this.resetAt } as LeaderboardData;
+    return { players, recent_solves: recentSolves, reset_at: Math.max(INITIAL_LOCK_EPOCH, this.resetAt) } as LeaderboardData;
   }
 
-  public syncClientData(clientPlayers?: Player[], clientAttempts?: TaskAttempt[]) {
+  public syncClientData(clientPlayers?: Player[], clientAttempts?: TaskAttempt[], clientResetAt?: number) {
+    if (clientResetAt && clientResetAt > this.resetAt) {
+      this.resetAll(clientResetAt);
+    }
+
+    const minValidEpoch = Math.max(INITIAL_LOCK_EPOCH, this.resetAt || 0);
+
     if (Array.isArray(clientPlayers)) {
       for (const cp of clientPlayers) {
         if (!cp || !cp.id || !cp.name) continue;
+        const createdTime = cp.created_at ? new Date(cp.created_at).getTime() : 0;
+        if (createdTime && createdTime < minValidEpoch) continue;
+
         const existing = this.players.find(
           (p) => p.id === cp.id || p.name.toLowerCase() === cp.name.trim().toLowerCase()
         );
@@ -466,9 +496,18 @@ class InMemoryGameDatabase {
       }
     }
 
+    const validPlayerIds = new Set(this.players.map((p) => p.id));
+
     if (Array.isArray(clientAttempts)) {
       for (const ca of clientAttempts) {
         if (!ca || !ca.player_id || !ca.node_key) continue;
+        // Hylätään orvot suoritukset (pelaajaa ei ole olemassa) sekä nollausta vanhemmat suoritukset
+        if (!validPlayerIds.has(ca.player_id)) continue;
+        const startT = ca.started_at ? new Date(ca.started_at).getTime() : 0;
+        const compT = ca.completed_at ? new Date(ca.completed_at).getTime() : startT;
+        if (startT && startT < minValidEpoch) continue;
+        if (compT && compT < minValidEpoch) continue;
+
         const existing = this.attempts.find(
           (a) =>
             a.player_id === ca.player_id &&
@@ -493,7 +532,7 @@ class InMemoryGameDatabase {
     return this.attempts.filter((a) => a.player_id === playerId);
   }
 
-  public resetAll() {
+  public resetAll(customResetAt?: number) {
     this.nodes.splice(
       0,
       this.nodes.length,
@@ -506,7 +545,7 @@ class InMemoryGameDatabase {
     this.nodeOverrides = {};
     this.players.splice(0, this.players.length);
     this.attempts.splice(0, this.attempts.length);
-    this.resetAt = Date.now();
+    this.resetAt = customResetAt || Date.now();
   }
 }
 
@@ -949,14 +988,20 @@ export async function getGameNodes(
 
 export async function getLeaderboard(
   clientPlayers?: Player[],
-  clientAttempts?: TaskAttempt[]
+  clientAttempts?: TaskAttempt[],
+  clientResetAt?: number
 ): Promise<LeaderboardData> {
-  if ((clientPlayers && clientPlayers.length > 0) || (clientAttempts && clientAttempts.length > 0)) {
-    inMemoryDb.syncClientData(clientPlayers, clientAttempts);
+  if (
+    (clientPlayers && clientPlayers.length > 0) ||
+    (clientAttempts && clientAttempts.length > 0) ||
+    clientResetAt
+  ) {
+    inMemoryDb.syncClientData(clientPlayers, clientAttempts, clientResetAt);
   }
 
   const sb = getSupabaseServerClient();
   const memBoard = inMemoryDb.getLeaderboard();
+  const minValidEpoch = Math.max(INITIAL_LOCK_EPOCH, inMemoryDb.resetAt || 0);
 
   if (sb) {
     try {
@@ -972,9 +1017,14 @@ export async function getLeaderboard(
         .order('completed_at', { ascending: false })
         .limit(30);
 
-      if (players && players.length > 0) {
+      const validSbPlayers = (players || []).filter((p: any) => {
+        const t = p.created_at ? new Date(p.created_at).getTime() : 0;
+        return !t || t >= minValidEpoch;
+      });
+
+      if (validSbPlayers.length > 0) {
         const mergedPlayerMap = new Map<string, Player>();
-        for (const p of players) {
+        for (const p of validSbPlayers) {
           mergedPlayerMap.set(p.id, p);
         }
         for (const mp of memBoard.players) {
@@ -997,17 +1047,23 @@ export async function getLeaderboard(
           playerMap.set(p.id, p.name);
         }
 
-        const formattedSolves: TaskAttempt[] = (solves || []).map((s: any) => ({
-          id: s.id,
-          player_id: s.player_id,
-          player_name: playerMap.get(s.player_id) || 'Pelaaja',
-          node_key: s.node_key,
-          started_at: s.started_at,
-          completed_at: s.completed_at,
-          duration_seconds: s.duration_seconds,
-          awarded_points: s.awarded_points,
-          is_completed: s.is_completed,
-        }));
+        const formattedSolves: TaskAttempt[] = (solves || [])
+          .filter((s: any) => {
+            if (!playerMap.has(s.player_id)) return false;
+            const compT = s.completed_at ? new Date(s.completed_at).getTime() : 0;
+            return !compT || compT >= minValidEpoch;
+          })
+          .map((s: any) => ({
+            id: s.id,
+            player_id: s.player_id,
+            player_name: playerMap.get(s.player_id)!,
+            node_key: s.node_key,
+            started_at: s.started_at,
+            completed_at: s.completed_at,
+            duration_seconds: s.duration_seconds,
+            awarded_points: s.awarded_points,
+            is_completed: s.is_completed,
+          }));
 
         for (const ms of memBoard.recent_solves) {
           const exists = formattedSolves.some(
@@ -1023,7 +1079,7 @@ export async function getLeaderboard(
         return {
           players: mergedPlayers,
           recent_solves: formattedSolves,
-          reset_at: (memBoard as any).reset_at,
+          reset_at: minValidEpoch,
         } as LeaderboardData;
       }
     } catch {
@@ -1035,6 +1091,7 @@ export async function getLeaderboard(
 }
 
 export async function getPlayerAttempts(playerId: string): Promise<TaskAttempt[]> {
+  const minValidEpoch = Math.max(INITIAL_LOCK_EPOCH, inMemoryDb.resetAt || 0);
   const sb = getSupabaseServerClient();
   if (sb) {
     try {
@@ -1042,7 +1099,12 @@ export async function getPlayerAttempts(playerId: string): Promise<TaskAttempt[]
         .from('task_attempts')
         .select('*')
         .eq('player_id', playerId);
-      if (data) return data;
+      if (data && data.length > 0) {
+        return data.filter((a: any) => {
+          const t = a.started_at ? new Date(a.started_at).getTime() : 0;
+          return !t || t >= minValidEpoch;
+        });
+      }
     } catch {
       // Fallback
     }
@@ -1050,7 +1112,7 @@ export async function getPlayerAttempts(playerId: string): Promise<TaskAttempt[]
   return inMemoryDb.getPlayerAttempts(playerId);
 }
 
-export async function handleResetGame(adminPin: string): Promise<{ success: boolean; error?: string }> {
+export async function handleResetGame(adminPin: string): Promise<{ success: boolean; resetAt?: number; error?: string }> {
   if (!verifyAdminPin(adminPin)) {
     return { success: false, error: 'Virheellinen Admin PIN-koodi. Pääsy evätty.' };
   }
@@ -1069,6 +1131,7 @@ export async function handleResetGame(adminPin: string): Promise<{ success: bool
     }
   }
 
-  inMemoryDb.resetAll();
-  return { success: true };
+  const nowReset = Date.now();
+  inMemoryDb.resetAll(nowReset);
+  return { success: true, resetAt: nowReset };
 }
