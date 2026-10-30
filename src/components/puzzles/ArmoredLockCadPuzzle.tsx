@@ -53,6 +53,7 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
   const [boltProgress, setBoltProgress] = useState(0); // 0 = locked (bolts out), 1 = unlocked (bolts in)
   const [showHint, setShowHint] = useState(false);
   const [animatingUnlock, setAnimatingUnlock] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Technical parameters
   const Z1 = 18; // Drive gear
@@ -99,11 +100,12 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
   // Check calculation & torque
   const handleApplyTorque = () => {
     soundFX.playKeyClick();
+    setErrorMsg(null);
 
     if (!isGearRatioCorrect) {
       soundFX.playFailure();
-      alert(
-        `Vaihe 1 puuttuu tai on virheellinen!\n\nMääritä ensin hammasrattaiston oikea välityssuhde i = Z₂ / Z₁ (Z₁=18, Z₂=54), jotta momentti välittyy pääakselille oikein.`
+      setErrorMsg(
+        'Vaihe 1 puuttuu tai on virheellinen! Määritä ensin hammasrattaiston oikea välityssuhde i = Z₂ / Z₁ (54 / 18), jotta momentti välittyy pääakselille oikein.'
       );
       return;
     }
@@ -117,8 +119,8 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
       triggerUnlock();
     } else {
       soundFX.playFailure();
-      alert(
-        `Vääntömomentti (${torqueInput} Nm) tai syötetty arvo ei täsmää lukkomekanismin murtorajaan!\n\nKun välityssuhde on i = 3.0 ja ensiömomentti M₁ = 127.33 Nm, tarkista pääakselin murtomomentti M₂ = i × M₁.`
+      setErrorMsg(
+        `Vääntömomentti (${torqueInput} Nm) ei täsmää lukkomekanismin murtorajaan! Kun välityssuhde on i = 3.0 ja ensiömomentti M₁ = 127.33 Nm, säädä pääakselin murtomomentiksi M₂ = i × M₁.`
       );
     }
   };
@@ -200,59 +202,63 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
 
       {/* Main CAD Blueprint Screen */}
       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-[#5c3e21] bg-[#0b141a] shadow-[inset_0_0_40px_rgba(0,0,0,0.9)] mb-4">
-        {/* CAD Toolbar (Top overlay) */}
-        <div className="absolute top-2 left-2 right-2 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-          {/* Blueprint Title badge */}
-          <div className="bg-[#0e1e27]/90 border border-[#2b4c60] text-[#7ec8e3] px-3 py-1 rounded-lg text-xs font-mono backdrop-blur-sm pointer-events-auto flex items-center gap-2 shadow-lg">
-            <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-ping" />
-            <span className="font-bold">CAD 1888 // DWG-NO: PANSSARI-LUKKO-3B</span>
+        {/* CAD Toolbar (Clean header bar so it never overlaps drawing on mobile) */}
+        <div className="bg-[#0e1e27] border-b border-[#2b4c60] p-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[#7ec8e3] px-2 py-0.5 text-[11px] font-mono flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-ping shrink-0" />
+            <span className="font-bold truncate">CAD 1888 // PANSSARI-LUKKO-3B</span>
           </div>
 
           {/* Zoom & Rotate Controls */}
-          <div className="flex items-center gap-1.5 bg-[#0e1e27]/90 border border-[#2b4c60] p-1 rounded-lg backdrop-blur-sm pointer-events-auto shadow-lg">
+          <div className="flex items-center gap-1 bg-[#08131a] border border-[#2b4c60] p-1 rounded-lg">
             <button
+              type="button"
               onClick={() => {
                 soundFX.playKeyClick();
                 setZoom((z) => Math.min(2.5, z + 0.2));
               }}
-              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded"
+              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded touch-manipulation"
               title="Lähennä (Zoom in)"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => {
                 soundFX.playKeyClick();
                 setZoom((z) => Math.max(0.6, z - 0.2));
               }}
-              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded"
+              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded touch-manipulation"
               title="Loitonna (Zoom out)"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => {
                 soundFX.playKeyClick();
                 setRotation((r) => (r - 15 + 360) % 360);
               }}
-              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded"
+              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded touch-manipulation"
               title="Kierrä vastapäivään"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => {
                 soundFX.playKeyClick();
                 setRotation((r) => (r + 15) % 360);
               }}
-              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded"
+              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded touch-manipulation"
               title="Kierrä myötäpäivään"
             >
               <RotateCw className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={resetView}
-              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded text-xs font-mono font-bold"
+              className="p-1.5 hover:bg-[#1a3342] text-[#7ec8e3] rounded text-xs font-mono font-bold touch-manipulation"
               title="Palauta oletusnäkymä"
             >
               1:1
@@ -262,7 +268,7 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
 
         {/* Blueprint Canvas SVG Area */}
         <div
-          className="w-full h-[360px] sm:h-[420px] cursor-grab active:cursor-grabbing flex items-center justify-center select-none"
+          className="w-full h-[260px] sm:h-[380px] cursor-grab active:cursor-grabbing flex items-center justify-center select-none overflow-hidden"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -543,13 +549,32 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
           </div>
 
           <div className="text-[11px] text-[#94a3b8] italic hidden sm:block">
-            * Voit raahata ja zoomata leikkauskuvaa hiirellä tai kosketuksella.
+            * Voit raahata ja zoomata leikkauskuvaa hiirellä tai painikkeilla.
+          </div>
+        </div>
+
+        {/* Clear mobile-readable Blueprint Spec Strip */}
+        <div className="bg-[#081118] border-t border-[#1d3545] p-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+          <div className="bg-[#0e1e27] p-2 rounded border border-[#2b4c60]">
+            <span className="text-[10px] text-[#7ec8e3] block">ENSIÖRATAS (Z₁):</span>
+            <strong className="text-white">Z₁ = 18 hammasta</strong>
+            <span className="text-[10px] text-[#38bdf8] block">M₁ = 127.33 Nm</span>
+          </div>
+          <div className="bg-[#0e1e27] p-2 rounded border border-[#2b4c60]">
+            <span className="text-[10px] text-[#fde047] block">VÄLIRATAS (Z₂):</span>
+            <strong className="text-[#fef08a]">Z₂ = 54 hammasta</strong>
+            <span className="text-[10px] text-[#fde047] block">i = Z₂ / Z₁</span>
+          </div>
+          <div className="bg-[#0e1e27] p-2 rounded border border-[#2b4c60] col-span-2 sm:col-span-1">
+            <span className="text-[10px] text-[#86efac] block">PÄÄAKSELIN MOMENTTI:</span>
+            <strong className="text-[#4ade80]">M₂ = i × M₁</strong>
+            <span className="text-[10px] text-[#94a3b8] block">Pyöristä kokonaisluvuksi (Nm)</span>
           </div>
         </div>
       </div>
 
       {/* Engineering Calculation Workbench */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* Step 1: Gear Train Ratio Check */}
         <div className="bg-[#18110a] p-4 rounded-xl border border-[#4a3219]">
           <div className="flex items-center gap-2 text-[#fbbf24] font-cinzel font-bold text-xs mb-2">
@@ -563,10 +588,11 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
             <span className="text-xs text-[#a88456] font-mono">i = 54 / 18 =</span>
             <input
               type="text"
+              inputMode="decimal"
               placeholder="Syötä i..."
               value={userGearRatio}
               onChange={(e) => setUserGearRatio(e.target.value)}
-              className="w-24 bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] p-1.5 rounded font-mono text-center text-xs focus:outline-none focus:border-[#d4af37]"
+              className="w-24 bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] p-2 rounded font-mono text-center text-sm focus:outline-none focus:border-[#d4af37]"
             />
             {isGearRatioCorrect ? (
               <span className="text-xs text-[#4ade80] font-bold">✓ Oikein (i = 3.0)</span>
@@ -576,12 +602,25 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
           </div>
           <div className="mt-2.5 pt-2 border-t border-[#4a3219]/60 text-[11px] font-mono text-[#a88456]">
             {calculatedMainShaftTorque !== null ? (
-              <span>
-                Välittyvä momentti M₂ = {parsedGearRatio} × 127.33 Nm ={' '}
-                <strong className={isGearRatioCorrect ? 'text-[#4ade80]' : 'text-[#fbbf24]'}>
-                  {calculatedMainShaftTorque} Nm
-                </strong>
-              </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  M₂ = {parsedGearRatio} × 127.33 Nm ={' '}
+                  <strong className={isGearRatioCorrect ? 'text-[#4ade80] text-sm' : 'text-[#fbbf24]'}>
+                    {calculatedMainShaftTorque} Nm
+                  </strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFX.playKeyClick();
+                    setTorqueInput(calculatedMainShaftTorque);
+                    setTextCodeInput(`${calculatedMainShaftTorque}NM`);
+                  }}
+                  className="bg-[#2a1c0e] hover:bg-[#3b2814] text-[#fbbf24] border border-[#d4af37] px-2.5 py-1 rounded text-[11px] font-bold touch-manipulation"
+                >
+                  Aseta avaimeen →
+                </button>
+              </div>
             ) : (
               <span>Syötä välityssuhde i laskeaksesi pääakselin momentin M₂ = i × M₁</span>
             )}
@@ -599,7 +638,7 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
             </span>
           </div>
           <p className="text-[11px] text-[#ab8a5f] font-serif mb-2">
-            Säädä momenttiavain Vaiheessa 1 laskettuun murtorajan vääntömomenttiin (M₂):
+            Säädä momenttiavain liukusäätimellä tai pikapainikkeilla:
           </p>
           <input
             type="range"
@@ -611,19 +650,31 @@ export const ArmoredLockCadPuzzle: React.FC<Props> = ({
               soundFX.playKeyClick();
               setTorqueInput(Number(e.target.value));
             }}
-            className="w-full accent-[#d4af37] cursor-pointer mb-1"
+            className="w-full accent-[#d4af37] cursor-pointer mb-2"
           />
-          <div className="flex justify-between text-[10px] text-[#a88456] font-mono">
-            <span>100 Nm (Kevyt)</span>
-            <span className="text-[#fbbf24] font-bold">
-              {calculatedMainShaftTorque !== null
-                ? `Laskettu M₂: ${calculatedMainShaftTorque} Nm`
-                : 'Laske ensin välityssuhde i'}
-            </span>
-            <span>600 Nm (Murtuma)</span>
+          <div className="flex items-center justify-between gap-1.5">
+            {[-10, -1, 1, 10].map((delta) => (
+              <button
+                key={delta}
+                type="button"
+                onClick={() => {
+                  soundFX.playKeyClick();
+                  setTorqueInput((prev) => Math.max(100, Math.min(600, prev + delta)));
+                }}
+                className="flex-1 bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+              >
+                {delta > 0 ? `+${delta}` : delta} Nm
+              </button>
+            ))}
           </div>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="p-3 mb-4 bg-red-950/80 border border-red-500/60 rounded-xl text-xs text-red-200">
+          {errorMsg}
+        </div>
+      )}
 
       {/* Code Entry & Apply Button */}
       <div className="bg-[#1e130a] p-4 rounded-xl border border-[#5c3e21] flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shadow-inner">

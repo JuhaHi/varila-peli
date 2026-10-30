@@ -74,57 +74,123 @@ export const HeinolaPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
 
       <form onSubmit={handleMixTincture} className="space-y-3.5">
         <div className="bg-[#18110a] p-3 rounded-lg border border-[#4a3219]">
-          <div className="flex justify-between text-xs text-[#d4af37] mb-1 font-cinzel">
+          <div className="flex justify-between text-xs text-[#d4af37] mb-1.5 font-cinzel">
             <span>1. TINCTURA VALERIANAE (XVIII TIPPAA):</span>
-            <span className="font-bold text-[#fbbf24] font-typewriter">{valerianaDrop} gtt</span>
+            <span className="font-bold text-[#fbbf24] font-typewriter text-sm">{valerianaDrop} gtt</span>
           </div>
-          <input
-            type="range"
-            min={1}
-            max={30}
-            value={valerianaDrop}
-            onChange={(e) => {
-              soundFX.playKeyClick();
-              setValerianaDrop(Number(e.target.value));
-            }}
-            className="w-full accent-[#d4af37]"
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setValerianaDrop((p) => Math.max(1, p - 1));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={1}
+              max={30}
+              value={valerianaDrop}
+              onChange={(e) => {
+                soundFX.playKeyClick();
+                setValerianaDrop(Number(e.target.value));
+              }}
+              className="w-full accent-[#d4af37]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setValerianaDrop((p) => Math.min(30, p + 1));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className="bg-[#18110a] p-3 rounded-lg border border-[#4a3219]">
-          <div className="flex justify-between text-xs text-[#d4af37] mb-1 font-cinzel">
+          <div className="flex justify-between text-xs text-[#d4af37] mb-1.5 font-cinzel">
             <span>2. EXTRACTUM MENTHAE (VIII TIPPAA):</span>
-            <span className="font-bold text-[#fbbf24] font-typewriter">{menthaDrop} gtt</span>
+            <span className="font-bold text-[#fbbf24] font-typewriter text-sm">{menthaDrop} gtt</span>
           </div>
-          <input
-            type="range"
-            min={1}
-            max={20}
-            value={menthaDrop}
-            onChange={(e) => {
-              soundFX.playKeyClick();
-              setMenthaDrop(Number(e.target.value));
-            }}
-            className="w-full accent-[#d4af37]"
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setMenthaDrop((p) => Math.max(1, p - 1));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={1}
+              max={20}
+              value={menthaDrop}
+              onChange={(e) => {
+                soundFX.playKeyClick();
+                setMenthaDrop(Number(e.target.value));
+              }}
+              className="w-full accent-[#d4af37]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setMenthaDrop((p) => Math.min(20, p + 1));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className="bg-[#18110a] p-3 rounded-lg border border-[#4a3219]">
-          <div className="flex justify-between text-xs text-[#d4af37] mb-1 font-cinzel">
+          <div className="flex justify-between text-xs text-[#d4af37] mb-1.5 font-cinzel">
             <span>3. SPIRITUS VINI VAHVUUS (LXXXVIII %):</span>
-            <span className="font-bold text-[#fbbf24] font-typewriter">{alcoholPerc} %</span>
+            <span className="font-bold text-[#fbbf24] font-typewriter text-sm">{alcoholPerc} %</span>
           </div>
-          <input
-            type="range"
-            min={40}
-            max={96}
-            value={alcoholPerc}
-            onChange={(e) => {
-              soundFX.playKeyClick();
-              setAlcoholPerc(Number(e.target.value));
-            }}
-            className="w-full accent-[#d4af37]"
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setAlcoholPerc((p) => Math.max(40, p - 1));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={40}
+              max={96}
+              value={alcoholPerc}
+              onChange={(e) => {
+                soundFX.playKeyClick();
+                setAlcoholPerc(Number(e.target.value));
+              }}
+              className="w-full accent-[#d4af37]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setAlcoholPerc((p) => Math.min(96, p + 1));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className="bg-[#18110a] p-3.5 rounded-xl border border-[#4a3219]">
@@ -133,10 +199,11 @@ export const HeinolaPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
           </label>
           <input
             type="text"
+            inputMode="numeric"
             placeholder="Syötä laskettu vasta-aineluku..."
             value={antidoteInput}
             onChange={(e) => setAntidoteInput(e.target.value)}
-            className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+            className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
           />
         </div>
 

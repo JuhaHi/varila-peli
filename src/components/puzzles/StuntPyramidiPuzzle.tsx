@@ -140,18 +140,20 @@ export const StuntPyramidiPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
         </div>
 
         {/* Action Control Buttons */}
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-3 pt-2 select-none">
           <button
+            type="button"
             onClick={nudgeLeft}
-            className="flex-1 btn-brass py-3 rounded-xl font-cinzel font-bold text-xs flex items-center justify-center gap-2 uppercase"
+            className="flex-1 btn-brass py-3.5 rounded-xl font-cinzel font-bold text-xs flex items-center justify-center gap-2 uppercase touch-manipulation select-none active:scale-95 transition"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Kallista Vasemmalle</span>
           </button>
 
           <button
+            type="button"
             onClick={nudgeRight}
-            className="flex-1 btn-brass py-3 rounded-xl font-cinzel font-bold text-xs flex items-center justify-center gap-2 uppercase"
+            className="flex-1 btn-brass py-3.5 rounded-xl font-cinzel font-bold text-xs flex items-center justify-center gap-2 uppercase touch-manipulation select-none active:scale-95 transition"
           >
             <span>Kallista Oikealle</span>
             <ArrowRight className="w-4 h-4" />

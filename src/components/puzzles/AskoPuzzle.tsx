@@ -13,9 +13,11 @@ export const AskoPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
   const [pressureBar, setPressureBar] = useState<number>(8);
   const [isCalculated, setIsCalculated] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleCalculate = () => {
     soundFX.playKeyClick();
+    setErrorMsg(null);
     if (threadSize === 48 && pressureBar === 12) {
       soundFX.playSuccess();
       setIsCalculated(true);
@@ -23,11 +25,11 @@ export const AskoPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
     } else if (threadSize !== 48) {
       soundFX.playFailure();
       setIsCalculated(false);
-      alert('Akselin murtolujuuslaskenta epäonnistui! Kierrekoko ei vastaa höyrykoneen piirustuksen mitoitusta.');
+      setErrorMsg('Akselin murtolujuuslaskenta epäonnistui! Kierrekoko ei vastaa höyrykoneen piirustuksen mitoitusta.');
     } else {
       soundFX.playFailure();
       setIsCalculated(false);
-      alert('Höyrypaineen taso ei riitä Nuoramoisten vuoden 1888 nousuun! Tarkista höyrypaineen valinta.');
+      setErrorMsg('Höyrypaineen taso ei riitä Nuoramoisten vuoden 1888 nousuun! Tarkista höyrypaineen valinta.');
     }
   };
 
@@ -107,10 +109,25 @@ export const AskoPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
       {/* Tactile Dials & Sliders */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div className="bg-[#18110a] p-3.5 rounded-lg border border-[#4a3219]">
-          <label className="text-xs text-[#d4af37] font-cinzel block mb-1">
-            AKSELIN KIERREKOKO (MM):
-          </label>
-          <div className="flex items-center gap-3">
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="text-xs text-[#d4af37] font-cinzel">
+              AKSELIN KIERREKOKO (MM):
+            </label>
+            <span className="text-base font-bold font-typewriter text-[#fbbf24] bg-[#0d0905] px-2.5 py-0.5 rounded border border-[#5c3e21]">
+              M{threadSize}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setThreadSize((p) => Math.max(30, p - 2));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              −
+            </button>
             <input
               type="range"
               min={30}
@@ -123,9 +140,16 @@ export const AskoPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
               }}
               className="w-full accent-[#d4af37]"
             />
-            <span className="text-base font-bold font-typewriter text-[#fbbf24] w-14 text-right bg-[#0d0905] px-2 py-0.5 rounded border border-[#5c3e21]">
-              M{threadSize}
-            </span>
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playKeyClick();
+                setThreadSize((p) => Math.min(60, p + 2));
+              }}
+              className="bg-[#24170d] hover:bg-[#362213] text-[#fef3c7] border border-[#5c3e21] px-3 py-1.5 rounded text-xs font-mono font-bold touch-manipulation"
+            >
+              +
+            </button>
           </div>
         </div>
 
@@ -148,9 +172,15 @@ export const AskoPuzzle: React.FC<Props> = ({ onSuccessCode }) => {
         </div>
       </div>
 
+      {errorMsg && (
+        <div className="p-3 mb-4 bg-red-950/80 border border-red-500/60 rounded-xl text-xs text-red-200 font-serif">
+          {errorMsg}
+        </div>
+      )}
+
       <button
         onClick={handleCalculate}
-        className="w-full btn-brass font-bold py-3 px-4 rounded-lg font-cinzel text-xs sm:text-sm flex items-center justify-center gap-2 tracking-wider uppercase shadow-xl"
+        className="w-full btn-brass font-bold py-3 px-4 rounded-lg font-cinzel text-xs sm:text-sm flex items-center justify-center gap-2 tracking-wider uppercase shadow-xl touch-manipulation"
       >
         <Cog className="w-4 h-4 animate-spin" />
         <span>Laske ja vahvista akselin murtolujuus</span>

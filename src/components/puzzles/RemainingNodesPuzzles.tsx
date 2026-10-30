@@ -172,10 +172,11 @@ export const PioneeriPuzzle: React.FC<PuzzleProps> = ({ onSuccessCode }) => {
             </p>
             <input
               type="text"
+              inputMode="decimal"
               placeholder="Syötä suuntapiiru..."
               value={bearingInput}
               onChange={(e) => setBearingInput(e.target.value)}
-              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
             />
           </div>
 
@@ -191,10 +192,11 @@ export const PioneeriPuzzle: React.FC<PuzzleProps> = ({ onSuccessCode }) => {
             </p>
             <input
               type="text"
+              inputMode="decimal"
               placeholder="Syötä kokonaismatka (m)..."
               value={distanceInput}
               onChange={(e) => setDistanceInput(e.target.value)}
-              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
             />
           </div>
         </div>
@@ -367,10 +369,11 @@ export const AikajanaHarhatPuzzle: React.FC<PuzzleProps> = ({ onSuccessCode }) =
           </p>
           <input
             type="text"
+            inputMode="numeric"
             placeholder="Syötä kolmen todellisen päivänumeron summa..."
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value)}
-            className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+            className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
           />
         </div>
 
@@ -503,7 +506,7 @@ export const OrpopojanTraumakarttaPuzzle: React.FC<PuzzleProps> = ({ onSuccessCo
           <span>KLIKKAA HUONEITA TUTKIAKSESI</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {rooms.map((room) => {
             const isSelected = selectedRoomId === room.id;
             return (
@@ -514,7 +517,7 @@ export const OrpopojanTraumakarttaPuzzle: React.FC<PuzzleProps> = ({ onSuccessCo
                   soundFX.playKeyClick();
                   setSelectedRoomId(room.id);
                 }}
-                className={`p-3 rounded-lg border-2 text-left transition ${
+                className={`p-3 rounded-lg border-2 text-left transition touch-manipulation ${
                   isSelected
                     ? 'bg-[#3b2413] text-[#fef3c7] border-[#d4af37] shadow-md'
                     : 'bg-[#e6d2b2] text-[#2b1d0c] border-[#8b5a2b] hover:bg-[#dcc39c]'
@@ -583,10 +586,11 @@ export const OrpopojanTraumakarttaPuzzle: React.FC<PuzzleProps> = ({ onSuccessCo
             </p>
             <input
               type="text"
+              inputMode="numeric"
               placeholder="Syötä huonenumero..."
               value={roomNumInput}
               onChange={(e) => setRoomNumInput(e.target.value)}
-              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
             />
           </div>
         </div>
@@ -803,10 +807,11 @@ export const TullikatePuzzle: React.FC<PuzzleProps> = ({ onSuccessCode }) => {
             </p>
             <input
               type="text"
+              inputMode="numeric"
               placeholder="Syötä aloitussilmukat (s)..."
               value={castOnInput}
               onChange={(e) => setCastOnInput(e.target.value)}
-              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
             />
           </div>
 
@@ -822,10 +827,11 @@ export const TullikatePuzzle: React.FC<PuzzleProps> = ({ onSuccessCode }) => {
             </p>
             <input
               type="text"
+              inputMode="numeric"
               placeholder="Syötä kantalapun silmukat..."
               value={heelStitchesInput}
               onChange={(e) => setHeelStitchesInput(e.target.value)}
-              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+              className="w-full bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-3 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
             />
           </div>
         </div>
@@ -1102,10 +1108,11 @@ export const KuraisetLatakotPuzzle: React.FC<PuzzleProps> = ({ onSuccessCode }) 
       <form onSubmit={handleVerify} className="pt-2 flex flex-col sm:flex-row gap-2">
         <input
           type="text"
+          inputMode="numeric"
           placeholder="Montako vesilätäkköä pihalla oli yhteensä?..."
           value={countInput}
           onChange={(e) => setCountInput(e.target.value)}
-          className="flex-1 bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-4 py-2.5 rounded-lg font-typewriter text-xs focus:outline-none focus:border-[#d4af37]"
+          className="flex-1 bg-[#0d0905] border border-[#5c3e21] text-[#fbbf24] px-4 py-2.5 rounded-lg font-typewriter text-sm focus:outline-none focus:border-[#d4af37]"
         />
         <button
           type="submit"
