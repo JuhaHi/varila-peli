@@ -118,26 +118,8 @@ export default function TerminalPage() {
       if (leadRes.ok) {
         const leadData = await leadRes.json();
         const serverPlayers: Player[] = leadData.players || [];
-        const resetAt = Number(leadData.reset_at || 0);
         setPlayers(serverPlayers);
         setRecentSolves(leadData.recent_solves || []);
-
-        // Jos admin on nollannut pelin tämän pelaajan kirjautumisen JÄLKEEN, kirjaudutaan ulos
-        if (typeof window !== 'undefined' && resetAt > 0) {
-          const storedId = localStorage.getItem('varila_player_id');
-          const loginAt = Number(localStorage.getItem('varila_login_at') || 0);
-          if (storedId && resetAt > loginAt) {
-            localStorage.removeItem('varila_player_id');
-            localStorage.removeItem('varila_player_name');
-            localStorage.removeItem('varila_player_pin');
-            localStorage.removeItem('varila_login_at');
-            setActivePlayerId(null);
-            setActivePlayerName('');
-            setPlayerAttempts([]);
-            setCanCloseRegistration(false);
-            setRegistrationOpen(true);
-          }
-        }
       }
     } catch (err) {
       console.error('Fetch error:', err);
