@@ -1,0 +1,18 @@
+{
+  "name": "Tapaus Värilä // 1888",
+  "short_name": "Värilä1888",
+  "description": "Värilän virkatalon 1888 mysteerin PWA-tutkintaterminaali",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0c0a",
+  "theme_color": "#25e24c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,183 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-cinzel: 'Cinzel', serif;
+  --font-serif: 'Crimson Pro', Georgia, serif;
+  --font-typewriter: 'Special Elite', monospace;
+  --font-gothic: 'MedievalSharp', cursive;
+
+  --color-parchment: #e8d5b5;
+  --color-parchment-dark: #1f1710;
+  --color-brass: #d4af37;
+  --color-copper: #b87333;
+  --color-amber-glow: #f59e0b;
+  --color-wax-red: #8b0000;
+}
+
+body {
+  background-color: #0c0805;
+  color: #e8d5b5;
+  font-family: var(--font-serif);
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background-image: 
+    radial-gradient(ellipse at 50% 0%, rgba(180, 100, 20, 0.15) 0%, rgba(10, 7, 5, 0.98) 75%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+/* Typography utilities */
+.font-cinzel {
+  font-family: var(--font-cinzel);
+}
+.font-typewriter {
+  font-family: var(--font-typewriter);
+}
+.font-gothic {
+  font-family: var(--font-gothic);
+}
+
+/* 1880s Antique Parchment Card */
+.parchment-card {
+  background: linear-gradient(145deg, #1f1710 0%, #150f0a 100%);
+  border: 1px solid #4a3622;
+  box-shadow: 
+    0 10px 30px -5px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(212, 175, 55, 0.15),
+    inset 0 0 20px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.parchment-card::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid rgba(212, 175, 55, 0.1);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Light paper document style for letters / archives */
+.paper-document {
+  background: #eedcc0;
+  color: #2b1d0c;
+  background-image: radial-gradient(#d8be96 1px, transparent 1px);
+  background-size: 16px 16px;
+  box-shadow: 
+    0 15px 35px rgba(0, 0, 0, 0.7),
+    0 1px 3px rgba(0,0,0,0.3);
+  border: 1px solid #b8986c;
+}
+
+/* Vintage Wax Seal */
+.wax-seal {
+  background: radial-gradient(circle at 35% 35%, #b91c1c, #7f1d1d, #450a0a);
+  box-shadow: 
+    0 4px 10px rgba(0, 0, 0, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.7);
+  border: 2px solid #5f0f0f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: #fef08a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Antique Brass Button */
+.btn-brass {
+  background: linear-gradient(180deg, #92662c 0%, #684318 50%, #4e2f0d 100%);
+  border: 1px solid #d4af37;
+  color: #fef3c7;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+}
+
+.btn-brass:hover {
+  background: linear-gradient(180deg, #b37e38 0%, #825420 50%, #5d3810 100%);
+  border-color: #fde047;
+  box-shadow: 
+    0 6px 14px rgba(0, 0, 0, 0.6),
+    0 0 12px rgba(212, 175, 55, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn-brass:active {
+  transform: translateY(1px);
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.6),
+    inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Candle Glow & Lantern glow */
+.lantern-glow {
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.25);
+}
+
+.text-lantern {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5), 0 0 20px rgba(217, 119, 6, 0.3);
+}
+
+/* Ornate Corner Accents */
+.ornate-corners {
+  position: relative;
+}
+.ornate-corners::before,
+.ornate-corners::after {
+  content: "❖";
+  position: absolute;
+  color: #d4af37;
+  font-size: 10px;
+  opacity: 0.6;
+}
+.ornate-corners::before {
+  top: 4px;
+  left: 6px;
+}
+.ornate-corners::after {
+  top: 4px;
+  right: 6px;
+}
+
+/* Vintage CRT overlay option */
+.crt-overlay::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%);
+  z-index: 40;
+  background-size: 100% 3px;
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+.crt-vignette {
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.9);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0906;
+  border-left: 1px solid #362414;
+}
+::-webkit-scrollbar-thumb {
+  background: #5a3c22;
+  border-radius: 3px;
+  border: 1px solid #29180b;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #875c34;
+}
