@@ -238,9 +238,11 @@ class InMemoryGameDatabase {
       };
     }
 
-    // New player
+    // New player - use deterministic ID based on lowercase name to ensure re-logins match
+    const normalizedName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const deterministicId = `player-${normalizedName || Date.now()}`;
     const newPlayer: Player = {
-      id: `player-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: deterministicId,
       name: cleanName,
       pin_code: cleanPin,
       total_score: 0,

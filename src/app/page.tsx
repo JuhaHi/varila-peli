@@ -323,6 +323,8 @@ export default function TerminalPage() {
 
   const handlePlayerRegistered = (player: Player) => {
     if (typeof window !== 'undefined') {
+      localStorage.setItem('varila_player_id', player.id);
+      localStorage.setItem('varila_player_name', player.name);
       localStorage.setItem('varila_login_at', String(Date.now()));
       try {
         const rawKnown = localStorage.getItem('varila_known_players');
@@ -336,8 +338,36 @@ export default function TerminalPage() {
         // ignore
       }
     }
-    // Tyhjennetään edellisen pelaajan tila välittömästi ennen uuden pelaajan tietojen latausta
-    setPlayerAttempts([]);
+
+    // Ladataan heti pelaajan aiemmat tallennetut suoritukset
+    let existingAttempts: TaskAttempt[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`varila_attempts_${player.id}`);
+        if (raw) {
+          existingAttempts = JSON.parse(raw);
+        } else {
+          // Tarkistetaan löytyykö samannimiselle pelaajalle toisella id:llä tallennettuja suorituksia
+          const rawKnown = localStorage.getItem('varila_known_players');
+          if (rawKnown) {
+            const known: Player[] = JSON.parse(rawKnown);
+            const oldMatch = known.find((k) => k.name.toLowerCase() === player.name.toLowerCase());
+            if (oldMatch && oldMatch.id !== player.id) {
+              const oldRaw = localStorage.getItem(`varila_attempts_${oldMatch.id}`);
+              if (oldRaw) {
+                const oldAtt: TaskAttempt[] = JSON.parse(oldRaw);
+                existingAttempts = oldAtt.map((a) => ({ ...a, player_id: player.id }));
+                localStorage.setItem(`varila_attempts_${player.id}`, JSON.stringify(existingAttempts));
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    setPlayerAttempts(existingAttempts);
     setInputCode('');
     setErrorCount(0);
     setLockoutDeadline(0);
@@ -757,8 +787,80 @@ export default function TerminalPage() {
                 videoUrl={activeNode.video_url}
                 onTaskStarted={handleTaskGateStarted}
               />
+            ) : isCurrentSolved ? (
+              // TEHTÄVÄ ON JO RATKAISTU -> SULJETTU TILA! Tehtävä sulkeutuu kyseiseltä pelaajalta, ei voi tehdä uudestaan.
+              <div className="parchment-card rounded-2xl border-2 border-emerald-500/80 p-6 sm:p-8 text-center shadow-2xl space-y-5 animate-fadeIn">
+                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-950/80 border-2 border-emerald-400 flex items-center justify-center shadow-[0_0_25px_rgba(34,197,94,0.4)]">
+                  <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+                </div>
+
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500 text-xs font-mono uppercase tracking-widest font-bold">
+                    ✓ ANOMALIA PURETTU JA SULJETTU
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-cinzel font-bold text-[#fef08a] mt-2 uppercase tracking-wide">
+                    {activeNode.title}
+                  </h2>
+                  <div className="text-xs text-[#a88456] font-mono mt-1">
+                    {activeNode.node_key} • SINETIN LOHKO ON VALAISTU KULTAISENA
+                  </div>
+                </div>
+
+                <div className="paper-document p-4 rounded-xl text-[#2b1d0c] max-w-md mx-auto text-xs space-y-2.5 shadow-inner">
+                  <div className="flex justify-between items-center font-bold text-sm border-b border-[#a88456]/40 pb-1.5">
+                    <span>Myönnetyt pisteet:</span>
+                    <span className="text-emerald-700 font-mono text-base font-extrabold">
+                      +{currentAttempt?.awarded_points || 100} p
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Oma ratkaisuaika:</span>
+                    <span className="font-mono font-bold text-stone-900">
+                      {formatSeconds(currentAttempt?.duration_seconds || elapsedSeconds)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#785434] italic pt-1.5 border-t border-[#a88456]/30">
+                    🔒 Olet jo purkanut tämän anomalian. Tehtävä on sulkeutunut uudelleenyrityksiltä aikalaskennan ja pisteiden turvaamiseksi.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  {(() => {
+                    const nextUnsolved = nodes.find(
+                      (n) => n.is_active && !solvedNodeKeys.includes(n.node_key)
+                    );
+                    if (nextUnsolved) {
+                      return (
+                        <button
+                          onClick={() => {
+                            soundFX.playKeyClick();
+                            setSelectedNodeKey(nextUnsolved.node_key);
+                          }}
+                          className="btn-brass font-cinzel font-bold text-xs sm:text-sm px-6 py-3 rounded-xl flex items-center gap-2 uppercase tracking-wider shadow-lg"
+                        >
+                          <span>Siirry seuraavaan tehtävään: {nextUnsolved.node_key}</span>
+                          <span>→</span>
+                        </button>
+                      );
+                    }
+                    return (
+                      <div className="text-xs text-[#fbbf24] font-cinzel">
+                        ✨ Kaikki tähän mennessä avatut anomaliat on ratkaistu! Odota pelinjohtajan avausta seuraavalle tehtävälle.
+                      </div>
+                    );
+                  })()}
+
+                  <button
+                    onClick={() => setVideoModalOpen(true)}
+                    className="bg-[#24170d] hover:bg-[#3b230d] text-[#fbbf24] border border-[#d4af37] text-xs font-cinzel font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition"
+                  >
+                    <Film className="w-3.5 h-3.5" />
+                    <span>Katso vihjetallenne uudelleen</span>
+                  </button>
+                </div>
+              </div>
             ) : (
-              // Tehtävä on käynnissä tai ratkaistu -> Minipeli & Juokseva aikalaskuri!
+              // Tehtävä on käynnissä (ei vielä ratkaistu) -> Minipeli & Juokseva aikalaskuri!
               <div className="parchment-card rounded-2xl border-2 border-[#d4af37] p-4 sm:p-5 shadow-2xl space-y-5">
                 {/* Header info */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[#5c3e21]">
@@ -1001,9 +1103,7 @@ export default function TerminalPage() {
         onRegistered={handlePlayerRegistered}
         onLogout={() => {
           if (typeof window !== 'undefined') {
-            if (activePlayerId) {
-              localStorage.removeItem(`varila_attempts_${activePlayerId}`);
-            }
+            // Huom: Säilytetään pelaajan suoritushistoria localStoragessa, jotta sinetti palautuu kun palaa samalla nimellä
             localStorage.removeItem('varila_player_id');
             localStorage.removeItem('varila_player_name');
             localStorage.removeItem('varila_player_pin');
