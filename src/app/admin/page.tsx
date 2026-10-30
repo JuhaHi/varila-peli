@@ -355,10 +355,47 @@ export default function AdminPage() {
 
   const handleWhatsAppShare = (node: GameNode) => {
     soundFX.playKeyClick();
-    const host = typeof window !== 'undefined' ? window.location.host : '';
-    const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
-    const message = `⚠️ HÄLYTYS: Uusi Värilä-anomalia havaittu!\n\nTehtävä "${node.title}" on nyt avattu päätelaitteille ratkottavaksi!\n\nAvaa arkisto heti osoitteessa: ${protocol}//${host}`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const rawVideo = (videoDrafts[node.node_key] ?? node.video_url ?? '').trim();
+    const fullVideoUrl = rawVideo.startsWith('http') ? rawVideo : `${origin}${rawVideo}`;
+    const message = `⚠️ HÄLYTYS: Uusi Värilä-anomalia havaittu!\n\nTehtävä "${node.title}" (${node.node_key}) on nyt avattu päätelaitteille ratkottavaksi!\n\n🎬 Anomaliavideo: ${fullVideoUrl}\n🗝️ Avaa arkisto heti osoitteessa: ${origin}`;
     const shareUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(shareUrl, '_blank');
+  };
+
+  const handleShareVideoFile = async (node: GameNode) => {
+    soundFX.playKeyClick();
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const rawVideo = (videoDrafts[node.node_key] ?? node.video_url ?? '').trim();
+    const fullVideoUrl = rawVideo.startsWith('http') ? rawVideo : `${origin}${rawVideo}`;
+    const caption = `🎬 TAPAUS VÄRILÄ // ${node.node_key}: ${node.title}\n\nKatso anomaliatallenne ja ratkaise tehtävä arkistopäätteellä: ${origin}`;
+
+    try {
+      // Kokeillaan jakaa itse MP4-videotiedosto suoraan (toimii puhelimilla ja tuetuilla selaimilla suoraan WhatsAppiin)
+      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+        setActionMessage(`Valmistellaan tehtävän ${node.node_key} Veo-videota jaettavaksi...`);
+        const res = await fetch(fullVideoUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const num = node.node_key.replace(/[^0-9]/g, '').padStart(2, '0');
+          const videoFile = new File([blob], `varila-node${num}.mp4`, { type: 'video/mp4' });
+          if (navigator.canShare({ files: [videoFile] })) {
+            setActionMessage(null);
+            await navigator.share({
+              title: `${node.node_key} – ${node.title}`,
+              text: caption,
+              files: [videoFile],
+            });
+            return;
+          }
+        }
+      }
+    } catch {
+      // Jos käyttäjä peruuttaa tai selain ei tue tiedostojakoa, siirrytään WhatsApp-linkkiin
+    }
+
+    setActionMessage(null);
+    const shareUrl = `https://wa.me/?text=${encodeURIComponent(`${caption}\n\n▶️ Suora videolinkki: ${fullVideoUrl}`)}`;
     window.open(shareUrl, '_blank');
   };
 
@@ -790,6 +827,16 @@ export default function AdminPage() {
                           className="bg-black/60 hover:bg-black text-amber-300 border border-amber-500/40 text-[11px] px-2.5 py-1 rounded transition"
                         >
                           {previewNode === node.node_key ? 'Sulje esikatselu' : '▶ Esikatsele'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleShareVideoFile(node)}
+                          className="bg-[#14532d] hover:bg-[#166534] text-[#86efac] border border-[#22c55e]/60 text-[11px] font-bold px-2.5 py-1 rounded flex items-center gap-1 transition"
+                          title="Lähetä tämän tehtävän Veo-video suoraan WhatsAppiin"
+                        >
+                          <Share2 className="w-3 h-3" />
+                          <span>Lähetä Veo-video (WA)</span>
                         </button>
                       </div>
 

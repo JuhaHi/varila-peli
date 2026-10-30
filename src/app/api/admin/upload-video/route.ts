@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { handleUpdateNodeVideo } from '@/lib/gameServer';
+import { handleUpdateNodeVideo, verifyAdminPin } from '@/lib/gameServer';
+import { getSupabaseServerClient } from '@/lib/supabaseClient';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
@@ -21,19 +22,74 @@ export async function POST(req: Request) {
         );
       }
 
+      if (!verifyAdminPin(adminPin)) {
+        return NextResponse.json(
+          { success: false, error: 'Virheellinen Admin PIN-koodi.' },
+          { status: 401 }
+        );
+      }
+
       const num = nodeKey.replace(/[^0-9]/g, '').padStart(2, '0');
       const fileName = `node${num}.mp4`;
-      const videosDir = path.join(process.cwd(), 'public', 'videos');
-      await mkdir(videosDir, { recursive: true });
-
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      const targetPath = path.join(videosDir, fileName);
 
-      await writeFile(targetPath, buffer);
+      let finalVideoUrl = `/videos/${fileName}`;
+      let savedLocally = false;
 
-      const publicVideoUrl = `/videos/${fileName}`;
-      const result = await handleUpdateNodeVideo(nodeKey, publicVideoUrl, adminPin);
+      // Yritetään tallentaa paikalliseen public/videos-kansioon (toimii localhostissa)
+      try {
+        const videosDir = path.join(process.cwd(), 'public', 'videos');
+        await mkdir(videosDir, { recursive: true });
+        const targetPath = path.join(videosDir, fileName);
+        await writeFile(targetPath, buffer);
+        savedLocally = true;
+      } catch {
+        // Vercelissä tiedostojärjestelmä on vain luku -tilassa (read-only), jolloin käytetään pilvitallennusta
+      }
+
+      // Yritetään tallentaa myös Supabase Storageen, jotta video toimii suoraan Vercelin pilvessä ilman git pushia
+      const sb = getSupabaseServerClient();
+      if (sb) {
+        try {
+          // Varmistetaan julkinen bucket "videos"
+          await sb.storage.createBucket('videos', {
+            public: true,
+            fileSizeLimit: 52428800, // 50 MB
+          }).catch(() => {});
+
+          const storagePath = `${fileName}`;
+          const { error: uploadErr } = await sb.storage
+            .from('videos')
+            .upload(storagePath, buffer, {
+              contentType: file.type || 'video/mp4',
+              upsert: true,
+            });
+
+          if (!uploadErr) {
+            const { data: pubData } = sb.storage.from('videos').getPublicUrl(storagePath);
+            if (pubData?.publicUrl) {
+              // Lisätään aikaleima välimuistin ohittamiseen
+              finalVideoUrl = `${pubData.publicUrl}?t=${Date.now()}`;
+            }
+          }
+        } catch {
+          // Jos Supabase Storage ei ole käytössä, käytetään paikallista polkua
+        }
+      }
+
+      if (!savedLocally && finalVideoUrl.startsWith('/videos/')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Vercelin palvelimelle ei voi kirjoittaa suoraan ilman pilvi-buckettia. Voit joko ladata MP4-tiedoston paikallisesti ja puskea Gitiin TAI liittää videon suoran URL-osoitteen kenttään.',
+          },
+          { status: 500 }
+        );
+      }
+
+      const result = await handleUpdateNodeVideo(nodeKey, finalVideoUrl, adminPin);
 
       if (!result.success) {
         return NextResponse.json(result, { status: 401 });
@@ -41,7 +97,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        videoUrl: publicVideoUrl,
+        videoUrl: finalVideoUrl,
         node: result.node,
       });
     }
