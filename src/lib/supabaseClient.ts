@@ -1,19 +1,22 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GameNode, Player } from './types';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseAnonKey =
+function cleanEnv(val?: string): string {
+  return (val || '').trim().replace(/^["']|["']$/g, '');
+}
+
+const supabaseUrl = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL);
+const supabaseAnonKey = cleanEnv(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
-  supabaseAnonKey &&
-  !supabaseUrl.includes('placeholder') &&
-  !supabaseAnonKey.includes('placeholder')
+    supabaseAnonKey &&
+    !supabaseUrl.includes('placeholder') &&
+    !supabaseAnonKey.includes('placeholder')
 );
 
 // Client-side / public Supabase client
@@ -23,11 +26,21 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 
 // Server-side privileged client (uses SERVICE_ROLE_KEY if provided, falls back to ANON)
 export const getSupabaseServerClient = (): SupabaseClient | null => {
-  if (!isSupabaseConfigured) return null;
-  const key = supabaseServiceKey && !supabaseServiceKey.includes('placeholder')
-    ? supabaseServiceKey
-    : supabaseAnonKey;
-  return createClient(supabaseUrl, key, {
+  const url = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL);
+  const serviceKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const anonKey = cleanEnv(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+  );
+  const key =
+    serviceKey && !serviceKey.includes('placeholder')
+      ? serviceKey
+      : anonKey && !anonKey.includes('placeholder')
+      ? anonKey
+      : '';
+
+  if (!url || !key || url.includes('placeholder')) return null;
+
+  return createClient(url, key, {
     auth: { persistSession: false },
   });
 };

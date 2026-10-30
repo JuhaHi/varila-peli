@@ -48,10 +48,63 @@ export default function AdminPage() {
 
   const fetchStats = useCallback(async (pinOverride?: string) => {
     const activePin = pinOverride ?? adminPin ?? '';
+    const knownPlayersMap = new Map<string, Player>();
+    const allAttempts: TaskAttempt[] = [];
+
+    if (typeof window !== 'undefined') {
+      try {
+        const rawKnown = localStorage.getItem('varila_known_players');
+        if (rawKnown) {
+          const parsed: Player[] = JSON.parse(rawKnown);
+          for (const p of parsed) {
+            if (p && p.id && p.name) knownPlayersMap.set(p.id, p);
+          }
+        }
+      } catch {
+        // ignore
+      }
+      const storedId = localStorage.getItem('varila_player_id');
+      const storedName = localStorage.getItem('varila_player_name');
+      if (storedId && storedName && !knownPlayersMap.has(storedId)) {
+        knownPlayersMap.set(storedId, {
+          id: storedId,
+          name: storedName,
+          total_score: 0,
+          created_at: new Date().toISOString(),
+        });
+      }
+      for (const pid of Array.from(knownPlayersMap.keys())) {
+        try {
+          const rawAtt = localStorage.getItem(`varila_attempts_${pid}`);
+          if (rawAtt) {
+            const parsedAtt: TaskAttempt[] = JSON.parse(rawAtt);
+            const validAtt = parsedAtt.filter((a) => a && a.player_id === pid);
+            allAttempts.push(...validAtt);
+            const totalScore = validAtt
+              .filter((a) => a.is_completed)
+              .reduce((sum, a) => sum + (a.awarded_points || 0), 0);
+            const p = knownPlayersMap.get(pid);
+            if (p && totalScore > (p.total_score || 0)) {
+              p.total_score = totalScore;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     try {
       const [nodesRes, leadRes] = await Promise.all([
         fetch(`/api/admin/toggle-node?pin=${encodeURIComponent(activePin)}`),
-        fetch('/api/leaderboard'),
+        fetch('/api/leaderboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            players: Array.from(knownPlayersMap.values()),
+            attempts: allAttempts,
+          }),
+        }),
       ]);
 
       if (nodesRes.ok) {

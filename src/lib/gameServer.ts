@@ -403,6 +403,48 @@ class InMemoryGameDatabase {
     return { players, recent_solves: recentSolves, reset_at: this.resetAt } as LeaderboardData;
   }
 
+  public syncClientData(clientPlayers?: Player[], clientAttempts?: TaskAttempt[]) {
+    if (Array.isArray(clientPlayers)) {
+      for (const cp of clientPlayers) {
+        if (!cp || !cp.id || !cp.name) continue;
+        const existing = this.players.find(
+          (p) => p.id === cp.id || p.name.toLowerCase() === cp.name.trim().toLowerCase()
+        );
+        if (!existing) {
+          this.players.push({
+            id: cp.id,
+            name: cp.name.trim(),
+            total_score: cp.total_score || 0,
+            created_at: cp.created_at || new Date().toISOString(),
+          });
+        } else if ((cp.total_score || 0) > (existing.total_score || 0)) {
+          existing.total_score = cp.total_score;
+        }
+      }
+    }
+
+    if (Array.isArray(clientAttempts)) {
+      for (const ca of clientAttempts) {
+        if (!ca || !ca.player_id || !ca.node_key) continue;
+        const existing = this.attempts.find(
+          (a) =>
+            a.player_id === ca.player_id &&
+            a.node_key.toUpperCase() === ca.node_key.toUpperCase()
+        );
+        if (!existing) {
+          this.attempts.push({ ...ca });
+        } else if (ca.is_completed && !existing.is_completed) {
+          existing.completed_at = ca.completed_at || new Date().toISOString();
+          existing.duration_seconds = ca.duration_seconds ?? existing.duration_seconds ?? 30;
+          existing.awarded_points = ca.awarded_points || 100;
+          existing.is_completed = true;
+        }
+      }
+    }
+
+    this.recalculateAllScores();
+  }
+
   public getPlayerAttempts(playerId: string): TaskAttempt[] {
     this.recalculateAllScores();
     return this.attempts.filter((a) => a.player_id === playerId);
@@ -443,6 +485,7 @@ export async function handleAuthLogin(name: string, pinCode: string): Promise<Au
         if (existingPlayer.pin_code !== cleanPin) {
           return { success: false, error: 'Virheellinen PIN-koodi tälle nimelle.' };
         }
+        inMemoryDb.loginOrRegister(cleanName, cleanPin);
         return {
           success: true,
           player: {
@@ -466,20 +509,19 @@ export async function handleAuthLogin(name: string, pinCode: string): Promise<Au
         .select()
         .single();
 
-      if (error || !newPlayer) {
-        return { success: false, error: 'Virhe pelaajan luonnissa: ' + (error?.message || 'Tuntematon virhe') };
+      if (!error && newPlayer) {
+        inMemoryDb.loginOrRegister(cleanName, cleanPin);
+        return {
+          success: true,
+          player: {
+            id: newPlayer.id,
+            name: newPlayer.name,
+            total_score: newPlayer.total_score,
+            created_at: newPlayer.created_at,
+          },
+          message: `Tervetuloa tutkintaan, ${newPlayer.name}!`,
+        };
       }
-
-      return {
-        success: true,
-        player: {
-          id: newPlayer.id,
-          name: newPlayer.name,
-          total_score: newPlayer.total_score,
-          created_at: newPlayer.created_at,
-        },
-        message: `Tervetuloa tutkintaan, ${newPlayer.name}!`,
-      };
     } catch {
       // Fallback
     }
@@ -687,6 +729,8 @@ export async function handleCheckCode(
         }
       }
 
+      inMemoryDb.checkCode(playerId, cleanKey, inputCode, clientStartedAt, playerName);
+
       return {
         success: true,
         points,
@@ -806,8 +850,17 @@ export async function getGameNodes(includeSecrets = false): Promise<GameNode[]> 
   return inMemoryDb.getNodes(includeSecrets);
 }
 
-export async function getLeaderboard(): Promise<LeaderboardData> {
+export async function getLeaderboard(
+  clientPlayers?: Player[],
+  clientAttempts?: TaskAttempt[]
+): Promise<LeaderboardData> {
+  if ((clientPlayers && clientPlayers.length > 0) || (clientAttempts && clientAttempts.length > 0)) {
+    inMemoryDb.syncClientData(clientPlayers, clientAttempts);
+  }
+
   const sb = getSupabaseServerClient();
+  const memBoard = inMemoryDb.getLeaderboard();
+
   if (sb) {
     try {
       const { data: players } = await sb
@@ -817,16 +870,40 @@ export async function getLeaderboard(): Promise<LeaderboardData> {
 
       const { data: solves } = await sb
         .from('task_attempts')
-        .select('id, player_id, node_key, started_at, completed_at, duration_seconds, awarded_points, is_completed, players(name)')
+        .select('id, player_id, node_key, started_at, completed_at, duration_seconds, awarded_points, is_completed')
         .eq('is_completed', true)
         .order('completed_at', { ascending: false })
         .limit(30);
 
-      if (players) {
+      if (players && players.length > 0) {
+        const mergedPlayerMap = new Map<string, Player>();
+        for (const p of players) {
+          mergedPlayerMap.set(p.id, p);
+        }
+        for (const mp of memBoard.players) {
+          const existing = Array.from(mergedPlayerMap.values()).find(
+            (x) => x.id === mp.id || x.name.toLowerCase() === mp.name.toLowerCase()
+          );
+          if (!existing) {
+            mergedPlayerMap.set(mp.id, mp);
+          } else if (mp.total_score > existing.total_score) {
+            existing.total_score = mp.total_score;
+          }
+        }
+
+        const mergedPlayers = Array.from(mergedPlayerMap.values()).sort(
+          (a, b) => b.total_score - a.total_score
+        );
+
+        const playerMap = new Map<string, string>();
+        for (const p of mergedPlayers) {
+          playerMap.set(p.id, p.name);
+        }
+
         const formattedSolves: TaskAttempt[] = (solves || []).map((s: any) => ({
           id: s.id,
           player_id: s.player_id,
-          player_name: s.players?.name || 'Pelaaja',
+          player_name: playerMap.get(s.player_id) || 'Pelaaja',
           node_key: s.node_key,
           started_at: s.started_at,
           completed_at: s.completed_at,
@@ -835,14 +912,29 @@ export async function getLeaderboard(): Promise<LeaderboardData> {
           is_completed: s.is_completed,
         }));
 
-        return { players, recent_solves: formattedSolves };
+        for (const ms of memBoard.recent_solves) {
+          const exists = formattedSolves.some(
+            (fs) =>
+              fs.player_id === ms.player_id &&
+              fs.node_key.toUpperCase() === ms.node_key.toUpperCase()
+          );
+          if (!exists) {
+            formattedSolves.push(ms);
+          }
+        }
+
+        return {
+          players: mergedPlayers,
+          recent_solves: formattedSolves,
+          reset_at: (memBoard as any).reset_at,
+        } as LeaderboardData;
       }
     } catch {
       // Fallback
     }
   }
 
-  return inMemoryDb.getLeaderboard();
+  return memBoard;
 }
 
 export async function getPlayerAttempts(playerId: string): Promise<TaskAttempt[]> {

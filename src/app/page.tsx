@@ -102,13 +102,72 @@ export default function TerminalPage() {
     }
   }, []);
 
+  // Helper to collect local players & attempts for serverless sync
+  const getLocalSyncPayload = useCallback(() => {
+    if (typeof window === 'undefined') return { players: [], attempts: [] };
+    const knownPlayersMap = new Map<string, Player>();
+    try {
+      const rawKnown = localStorage.getItem('varila_known_players');
+      if (rawKnown) {
+        const parsed: Player[] = JSON.parse(rawKnown);
+        for (const p of parsed) {
+          if (p && p.id && p.name) knownPlayersMap.set(p.id, p);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const storedId = localStorage.getItem('varila_player_id');
+    const storedName = localStorage.getItem('varila_player_name');
+    if (storedId && storedName && !knownPlayersMap.has(storedId)) {
+      knownPlayersMap.set(storedId, {
+        id: storedId,
+        name: storedName,
+        total_score: 0,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    const allAttempts: TaskAttempt[] = [];
+    for (const pid of Array.from(knownPlayersMap.keys())) {
+      try {
+        const rawAtt = localStorage.getItem(`varila_attempts_${pid}`);
+        if (rawAtt) {
+          const parsedAtt: TaskAttempt[] = JSON.parse(rawAtt);
+          const validAtt = parsedAtt.filter((a) => a && a.player_id === pid);
+          allAttempts.push(...validAtt);
+          const totalScore = validAtt
+            .filter((a) => a.is_completed)
+            .reduce((sum, a) => sum + (a.awarded_points || 0), 0);
+          const p = knownPlayersMap.get(pid);
+          if (p && totalScore > (p.total_score || 0)) {
+            p.total_score = totalScore;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return {
+      players: Array.from(knownPlayersMap.values()),
+      attempts: allAttempts,
+    };
+  }, []);
+
   // Fetch nodes, leaderboard, and attempts
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const syncPayload = getLocalSyncPayload();
       const [nodesRes, leadRes] = await Promise.all([
         fetch('/api/nodes'),
-        fetch('/api/leaderboard'),
+        fetch('/api/leaderboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(syncPayload),
+        }),
       ]);
 
       if (nodesRes.ok) {
@@ -126,14 +185,21 @@ export default function TerminalPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [getLocalSyncPayload]);
 
   const fetchPlayerAttempts = useCallback(async (playerId: string) => {
     let localSaved: TaskAttempt[] = [];
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem(`varila_attempts_${playerId}`);
-        if (raw) localSaved = JSON.parse(raw);
+        if (raw) {
+          const parsed: TaskAttempt[] = JSON.parse(raw);
+          // TÄRKEÄ SUODATUS: Pidä vain tämän pelaajan omat suoritukset (estää edellisen pelaajan suoritusten vuotamisen)
+          localSaved = parsed.filter((a) => a && a.player_id === playerId);
+          if (localSaved.length !== parsed.length) {
+            localStorage.setItem(`varila_attempts_${playerId}`, JSON.stringify(localSaved));
+          }
+        }
       } catch {
         // ignore
       }
@@ -142,10 +208,13 @@ export default function TerminalPage() {
     try {
       const res = await fetch(`/api/attempts?playerId=${encodeURIComponent(playerId)}`);
       if (res.ok) {
-        const serverAttempts: TaskAttempt[] = await res.json();
+        const serverAttempts: TaskAttempt[] = (await res.json()).filter(
+          (sa: TaskAttempt) => sa && sa.player_id === playerId
+        );
         setPlayerAttempts((prev) => {
           const map = new Map<string, TaskAttempt>();
-          for (const a of [...localSaved, ...prev]) {
+          const ownPrev = prev.filter((a) => a && a.player_id === playerId);
+          for (const a of [...localSaved, ...ownPrev]) {
             map.set(a.node_key.toUpperCase(), a);
           }
           for (const sa of serverAttempts) {
@@ -167,9 +236,7 @@ export default function TerminalPage() {
       console.error('Attempts error:', err);
     }
 
-    if (localSaved.length > 0) {
-      setPlayerAttempts((prev) => (prev.length > 0 ? prev : localSaved));
-    }
+    setPlayerAttempts(localSaved);
   }, []);
 
   useEffect(() => {
@@ -192,19 +259,35 @@ export default function TerminalPage() {
   const handlePlayerRegistered = (player: Player) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('varila_login_at', String(Date.now()));
+      try {
+        const rawKnown = localStorage.getItem('varila_known_players');
+        const known: Player[] = rawKnown ? JSON.parse(rawKnown) : [];
+        const filtered = known.filter(
+          (p) => p && p.id !== player.id && p.name.toLowerCase() !== player.name.toLowerCase()
+        );
+        filtered.push(player);
+        localStorage.setItem('varila_known_players', JSON.stringify(filtered));
+      } catch {
+        // ignore
+      }
     }
+    // Tyhjennetään edellisen pelaajan tila välittömästi ennen uuden pelaajan tietojen latausta
+    setPlayerAttempts([]);
+    setInputCode('');
+    setErrorCount(0);
+    setLockoutDeadline(0);
     setActivePlayerId(player.id);
     setActivePlayerName(player.name);
     setPlayers((prev) => (prev.some((p) => p.id === player.id) ? prev : [...prev, player]));
     setRegistrationOpen(false);
     showNotification(`Tervetuloa tutkintaan, ${player.name}!`, 'success');
-    fetchData();
     fetchPlayerAttempts(player.id);
+    fetchData();
   };
 
-  // Find solved node keys for this player
+  // Find solved node keys for this player ONLY
   const solvedNodeKeys = playerAttempts
-    .filter((a) => a.is_completed)
+    .filter((a) => a.player_id === activePlayerId && a.is_completed)
     .map((a) => a.node_key);
 
   // Active current node: the selected node or first active unsolved node
@@ -214,10 +297,70 @@ export default function TerminalPage() {
     nodes[0];
 
   const currentAttempt = playerAttempts.find(
-    (a) => a.node_key.toUpperCase() === (activeNode?.node_key || '').toUpperCase()
+    (a) =>
+      a.player_id === activePlayerId &&
+      a.node_key.toUpperCase() === (activeNode?.node_key || '').toUpperCase()
   );
 
   const isCurrentSolved = Boolean(currentAttempt?.is_completed || (activeNode && solvedNodeKeys.includes(activeNode.node_key)));
+
+  // Lasketaan aktiivisen pelaajan pistemäärä myös paikallisista ratkaistuista tehtävistä,
+  // jotta yläpalkin pisteet ja Pistetilanne päivittyvät välittömästi
+  const activePlayerLocalScore = playerAttempts
+    .filter((a) => a.player_id === activePlayerId && a.is_completed)
+    .reduce((sum, a) => sum + (a.awarded_points || 0), 0);
+
+  const displayPlayers: Player[] = (() => {
+    const map = new Map<string, Player>();
+    for (const p of players) {
+      map.set(p.id, { ...p });
+    }
+    const localSync = getLocalSyncPayload();
+    for (const lp of localSync.players) {
+      const existing = Array.from(map.values()).find(
+        (x) => x.id === lp.id || x.name.toLowerCase() === lp.name.toLowerCase()
+      );
+      if (!existing) {
+        map.set(lp.id, { ...lp });
+      } else if ((lp.total_score || 0) > (existing.total_score || 0)) {
+        existing.total_score = lp.total_score;
+      }
+    }
+    if (activePlayerId && activePlayerName) {
+      const existing = map.get(activePlayerId);
+      if (!existing) {
+        map.set(activePlayerId, {
+          id: activePlayerId,
+          name: activePlayerName,
+          total_score: activePlayerLocalScore,
+          created_at: new Date().toISOString(),
+        });
+      } else if (activePlayerLocalScore > (existing.total_score || 0)) {
+        existing.total_score = activePlayerLocalScore;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.total_score - a.total_score);
+  })();
+
+  const displaySolves: TaskAttempt[] = (() => {
+    const list = [...recentSolves];
+    for (const att of playerAttempts) {
+      if (att.player_id === activePlayerId && att.is_completed) {
+        const exists = list.some(
+          (s) =>
+            s.player_id === att.player_id &&
+            s.node_key.toUpperCase() === att.node_key.toUpperCase()
+        );
+        if (!exists) {
+          list.unshift({
+            ...att,
+            player_name: activePlayerName || 'Pelaaja',
+          });
+        }
+      }
+    }
+    return list;
+  })();
 
   // TaskGate callback: triggered ONLY after teaser video is watched and user clicks "Siirry ratkaisemaan tehtävää"
   const handleTaskGateStarted = (startedAt: string) => {
@@ -356,7 +499,7 @@ export default function TerminalPage() {
     <div className={`min-h-screen bg-[#070a07] text-[#e8d5b5] flex flex-col font-serif ${crtEnabled ? 'crt-overlay crt-vignette' : ''}`}>
       {/* Victorian Header */}
       <Header
-        players={players}
+        players={displayPlayers}
         activePlayerId={activePlayerId}
         activePlayerName={activePlayerName}
         onOpenProfileModal={() => {
@@ -754,8 +897,8 @@ export default function TerminalPage() {
         {/* Pistetilanne Tab */}
         {activeView === 'leaderboard' && (
           <LeaderboardTab
-            players={players}
-            solves={recentSolves}
+            players={displayPlayers}
+            solves={displaySolves}
             onRefresh={fetchData}
             isLoading={isLoading}
           />
