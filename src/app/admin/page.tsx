@@ -48,23 +48,53 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchStats = useCallback(async (pinOverride?: string) => {
+    const activePin = pinOverride ?? adminPin ?? sessionStorage.getItem('varila_admin_pin') ?? '';
+    try {
+      const [nodesRes, leadRes] = await Promise.all([
+        fetch(`/api/admin/toggle-node?pin=${encodeURIComponent(activePin)}`),
+        fetch('/api/leaderboard'),
+      ]);
+
+      if (nodesRes.ok) {
+        const nodesData = await nodesRes.json();
+        setNodes(nodesData);
+      } else if (nodesRes.status === 401) {
+        sessionStorage.removeItem('varila_admin_pin');
+        setIsAuthenticated(false);
+        setAuthError('Virheellinen järjestäjän PIN-koodi! Pääsy evätty.');
+      }
+      if (leadRes.ok) {
+        const leadData = await leadRes.json();
+        setPlayers(leadData.players || []);
+        setRecentSolves(leadData.recent_solves || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [adminPin]);
+
   const verifyPin = async (pinToTest: string) => {
     setIsLoading(true);
     setAuthError(null);
     try {
-      const res = await fetch('/api/admin/toggle-node');
+      const res = await fetch(`/api/admin/toggle-node?pin=${encodeURIComponent(pinToTest)}`);
       if (res.ok) {
-        // Test toggle on a dry run or simply verify against standard pin
-        // We fetch the full nodes with secret codes
         const data = await res.json();
         setNodes(data);
         setIsAuthenticated(true);
         sessionStorage.setItem('varila_admin_pin', pinToTest);
-        fetchStats();
+        soundFX.playSuccess();
+        fetchStats(pinToTest);
       } else {
-        setAuthError('Yhteysvirhe järjestelmään.');
+        soundFX.playFailure();
+        sessionStorage.removeItem('varila_admin_pin');
+        setIsAuthenticated(false);
+        const errData = await res.json().catch(() => ({}));
+        setAuthError(errData.error || 'Virheellinen järjestäjän PIN-koodi! Pääsy evätty.');
       }
     } catch {
+      soundFX.playFailure();
       setAuthError('Yhteysvirhe järjestelmään.');
     } finally {
       setIsLoading(false);
@@ -80,26 +110,12 @@ export default function AdminPage() {
     verifyPin(adminPin.trim());
   };
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const [nodesRes, leadRes] = await Promise.all([
-        fetch('/api/admin/toggle-node'),
-        fetch('/api/leaderboard'),
-      ]);
-
-      if (nodesRes.ok) {
-        const nodesData = await nodesRes.json();
-        setNodes(nodesData);
-      }
-      if (leadRes.ok) {
-        const leadData = await leadRes.json();
-        setPlayers(leadData.players || []);
-        setRecentSolves(leadData.recent_solves || []);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
+  const handleLogoutAdmin = () => {
+    soundFX.playKeyClick();
+    sessionStorage.removeItem('varila_admin_pin');
+    setAdminPin('');
+    setIsAuthenticated(false);
+  };
 
   const handleToggle = async (nodeKey: string, currentStatus: boolean) => {
     soundFX.playKeyClick();
@@ -225,11 +241,18 @@ export default function AdminPage() {
       return;
     }
     try {
-      const res = await fetch('/api/reset', { method: 'POST' });
+      const res = await fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPin }),
+      });
       if (res.ok) {
         soundFX.playSuccess();
         alert('Peli alustettu onnistuneesti!');
         fetchStats();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Nollaus epäonnistui');
       }
     } catch {
       alert('Nollaus epäonnistui');
@@ -326,11 +349,19 @@ export default function AdminPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchStats}
+              onClick={() => fetchStats()}
               className="bg-[#121c12] hover:bg-[#1b2b1b] text-[#25e24c] border border-[#25e24c]/40 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Päivitä</span>
+            </button>
+            <button
+              onClick={handleLogoutAdmin}
+              className="bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-500/40 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
+              title="Kirjaudu ulos Admin-paneelista"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lukitse</span>
             </button>
             <Link
               href="/"

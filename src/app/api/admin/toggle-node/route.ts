@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { handleToggleNode, getGameNodes } from '@/lib/gameServer';
+import { handleToggleNode, getGameNodes, verifyAdminPin } from '@/lib/gameServer';
 
 export async function POST(req: Request) {
   try {
@@ -31,9 +31,19 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
-  // Returns nodes with secret codes for verified admin view
+export async function GET(req: Request) {
+  // Returns nodes with secret codes ONLY for verified admin PIN
   try {
+    const { searchParams } = new URL(req.url);
+    const pin = searchParams.get('pin') || req.headers.get('x-admin-pin') || '';
+
+    if (!verifyAdminPin(pin)) {
+      return NextResponse.json(
+        { error: 'Virheellinen Admin PIN-koodi. Pääsy evätty.' },
+        { status: 401 }
+      );
+    }
+
     const nodes = await getGameNodes(true);
     return NextResponse.json(nodes);
   } catch (error) {

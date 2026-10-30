@@ -1,7 +1,11 @@
 import { getSupabaseServerClient, isSupabaseConfigured, INITIAL_NODES, INITIAL_PLAYERS } from './supabaseClient';
 import { GameNode, Player, TaskAttempt, CheckCodeResponse, StartTaskResponse, AuthLoginResponse, LeaderboardData } from './types';
 
-const ADMIN_PIN = process.env.ADMIN_SECRET_PIN || '1888';
+const ADMIN_PIN = (process.env.ADMIN_SECRET_PIN || '1888').trim();
+
+export function verifyAdminPin(pin?: string | null): boolean {
+  return Boolean(pin && pin.trim() === ADMIN_PIN);
+}
 
 // Hyväksytyt rinnakkaiskoodit minipelikomponenteille ja tietokannan oletuskoodeille
 const NODE_ACCEPTED_CODES: Record<string, string[]> = {
@@ -798,4 +802,23 @@ export async function getPlayerAttempts(playerId: string): Promise<TaskAttempt[]
     }
   }
   return inMemoryDb.getPlayerAttempts(playerId);
+}
+
+export async function handleResetGame(adminPin: string): Promise<{ success: boolean; error?: string }> {
+  if (!verifyAdminPin(adminPin)) {
+    return { success: false, error: 'Virheellinen Admin PIN-koodi. Pääsy evätty.' };
+  }
+
+  const sb = getSupabaseServerClient();
+  if (sb) {
+    try {
+      await sb.from('task_attempts').delete().neq('node_key', '');
+      await sb.from('players').delete().neq('name', '');
+    } catch {
+      // Fallback
+    }
+  }
+
+  inMemoryDb.resetAll();
+  return { success: true };
 }
