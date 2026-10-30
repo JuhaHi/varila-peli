@@ -5,13 +5,13 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const playerId = body.playerId || body.player_id || body.teamId;
-    const { nodeKey, inputCode } = body;
+    const { nodeKey, inputCode, startedAt, playerName } = body;
 
     if (!playerId || !nodeKey || !inputCode) {
       return NextResponse.json({ success: false, message: 'Puuttuvat kentät (playerId, nodeKey tai inputCode).' }, { status: 400 });
     }
 
-    const result = await handleCheckCode(playerId, nodeKey, inputCode);
+    const result = await handleCheckCode(playerId, nodeKey, inputCode, startedAt, playerName);
 
     if (!result.success) {
       return NextResponse.json(result, { status: 400 });

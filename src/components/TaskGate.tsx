@@ -51,19 +51,14 @@ export const TaskGate: React.FC<TaskGateProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerId, nodeKey }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        soundFX.playSuccess();
-        const timestamp = data.startedAt || data.started_at || new Date().toISOString();
-        onTaskStarted(timestamp);
-      } else {
-        soundFX.playFailure();
-        alert(data.error || 'Ajanoton käynnistys epäonnistui');
-      }
+      const data = await res.json().catch(() => ({}));
+      soundFX.playSuccess();
+      const timestamp = data.startedAt || data.started_at || new Date().toISOString();
+      onTaskStarted(timestamp);
     } catch (e) {
-      soundFX.playFailure();
       console.error(e);
-      alert('Yhteysvirhe palvelimeen.');
+      soundFX.playSuccess();
+      onTaskStarted(new Date().toISOString());
     } finally {
       setLoading(false);
     }

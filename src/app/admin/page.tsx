@@ -253,9 +253,9 @@ export default function AdminPage() {
       if (res.ok) {
         soundFX.playSuccess();
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('varila_player_id');
-          localStorage.removeItem('varila_player_name');
-          localStorage.removeItem('varila_player_pin');
+          Object.keys(localStorage).forEach((k) => {
+            if (k.startsWith('varila_')) localStorage.removeItem(k);
+          });
         }
         alert('Peli ja pelaajat alustettu onnistuneesti!');
         fetchStats();

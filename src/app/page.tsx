@@ -129,14 +129,46 @@ export default function TerminalPage() {
   }, []);
 
   const fetchPlayerAttempts = useCallback(async (playerId: string) => {
+    let localSaved: TaskAttempt[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`varila_attempts_${playerId}`);
+        if (raw) localSaved = JSON.parse(raw);
+      } catch {
+        // ignore
+      }
+    }
+
     try {
       const res = await fetch(`/api/attempts?playerId=${encodeURIComponent(playerId)}`);
       if (res.ok) {
-        const attempts: TaskAttempt[] = await res.json();
-        setPlayerAttempts(attempts);
+        const serverAttempts: TaskAttempt[] = await res.json();
+        setPlayerAttempts((prev) => {
+          const map = new Map<string, TaskAttempt>();
+          for (const a of [...localSaved, ...prev]) {
+            map.set(a.node_key.toUpperCase(), a);
+          }
+          for (const sa of serverAttempts) {
+            const key = sa.node_key.toUpperCase();
+            const existing = map.get(key);
+            if (!existing || sa.is_completed || !existing.is_completed) {
+              map.set(key, sa);
+            }
+          }
+          const merged = Array.from(map.values());
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`varila_attempts_${playerId}`, JSON.stringify(merged));
+          }
+          return merged;
+        });
+        return;
       }
     } catch (err) {
       console.error('Attempts error:', err);
+    }
+
+    if (localSaved.length > 0) {
+      setPlayerAttempts((prev) => (prev.length > 0 ? prev : localSaved));
     }
   }, []);
 
@@ -189,10 +221,11 @@ export default function TerminalPage() {
 
   // TaskGate callback: triggered ONLY after teaser video is watched and user clicks "Siirry ratkaisemaan tehtävää"
   const handleTaskGateStarted = (startedAt: string) => {
-    if (!activePlayerId || !activeNode) return;
+    if (!activeNode) return;
+    const pid = activePlayerId || 'local-player';
     const newAttempt: TaskAttempt = {
       id: `att-${Date.now()}`,
-      player_id: activePlayerId,
+      player_id: pid,
       node_key: activeNode.node_key,
       started_at: startedAt,
       completed_at: null,
@@ -200,11 +233,16 @@ export default function TerminalPage() {
       awarded_points: 0,
       is_completed: false,
     };
-    setPlayerAttempts((prev) => [
-      ...prev.filter((a) => a.node_key.toUpperCase() !== activeNode.node_key.toUpperCase()),
-      newAttempt,
-    ]);
-    fetchPlayerAttempts(activePlayerId);
+    setPlayerAttempts((prev) => {
+      const updated = [
+        ...prev.filter((a) => a.node_key.toUpperCase() !== activeNode.node_key.toUpperCase()),
+        newAttempt,
+      ];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`varila_attempts_${pid}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
   };
 
   // Calculate elapsed seconds from server-recorded started_at
@@ -244,8 +282,10 @@ export default function TerminalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           playerId: activePlayerId,
+          playerName: activePlayerName,
           nodeKey: activeNode.node_key,
           inputCode: code,
+          startedAt: currentAttempt?.started_at,
         }),
       });
       const data = await res.json();
@@ -261,6 +301,26 @@ export default function TerminalPage() {
         showNotification(`🎉 ${data.message}`, 'success');
         setInputCode('');
         setErrorCount(0);
+        setPlayerAttempts((prev) => {
+          const solvedAttempt: TaskAttempt = {
+            id: currentAttempt?.id || `att-${Date.now()}`,
+            player_id: activePlayerId,
+            node_key: activeNode.node_key,
+            started_at: currentAttempt?.started_at || new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+            duration_seconds: data.durationSeconds || elapsedSeconds,
+            awarded_points: data.points || 100,
+            is_completed: true,
+          };
+          const updated = [
+            ...prev.filter((a) => a.node_key.toUpperCase() !== activeNode.node_key.toUpperCase()),
+            solvedAttempt,
+          ];
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`varila_attempts_${activePlayerId}`, JSON.stringify(updated));
+          }
+          return updated;
+        });
         fetchData();
         fetchPlayerAttempts(activePlayerId);
       } else {
@@ -708,6 +768,9 @@ export default function TerminalPage() {
         onRegistered={handlePlayerRegistered}
         onLogout={() => {
           if (typeof window !== 'undefined') {
+            if (activePlayerId) {
+              localStorage.removeItem(`varila_attempts_${activePlayerId}`);
+            }
             localStorage.removeItem('varila_player_id');
             localStorage.removeItem('varila_player_name');
             localStorage.removeItem('varila_player_pin');

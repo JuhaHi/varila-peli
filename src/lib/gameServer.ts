@@ -274,7 +274,13 @@ class InMemoryGameDatabase {
     };
   }
 
-  public checkCode(playerId: string, nodeKey: string, inputCode: string): CheckCodeResponse {
+  public checkCode(
+    playerId: string,
+    nodeKey: string,
+    inputCode: string,
+    clientStartedAt?: string,
+    playerName?: string
+  ): CheckCodeResponse {
     const node = this.getNode(nodeKey);
     if (!node) {
       return { success: false, message: 'Tuntematon anomalia.' };
@@ -285,6 +291,15 @@ class InMemoryGameDatabase {
         success: false,
         message: 'Virheellinen purkukoodi. Tarkista vihjeet ja laskelmat!',
       };
+    }
+
+    if (playerName && !this.players.some((p) => p.id === playerId)) {
+      this.players.push({
+        id: playerId,
+        name: playerName.trim(),
+        total_score: 0,
+        created_at: new Date().toISOString(),
+      });
     }
 
     let attempt = this.attempts.find(
@@ -302,7 +317,12 @@ class InMemoryGameDatabase {
     }
 
     const completedAt = new Date();
-    let startTime = attempt ? new Date(attempt.started_at).getTime() : completedAt.getTime() - 30000;
+    const parsedClientStart = clientStartedAt ? new Date(clientStartedAt).getTime() : NaN;
+    const startTime = attempt
+      ? new Date(attempt.started_at).getTime()
+      : !isNaN(parsedClientStart)
+      ? parsedClientStart
+      : completedAt.getTime() - 30000;
     const durationSeconds = Math.max(1, Math.round((completedAt.getTime() - startTime) / 1000));
 
     if (!attempt) {
@@ -474,21 +494,7 @@ export async function handleStartTask(playerId: string, nodeKey: string): Promis
 
   if (sb) {
     try {
-      // Check node active state
-      const { data: node } = await sb
-        .from('game_nodes')
-        .select('is_active')
-        .eq('node_key', cleanKey)
-        .maybeSingle();
-
-      if (!node) {
-        return { success: false, node_key: cleanKey, started_at: '', error: 'Tehtävää ei löydy.' };
-      }
-      if (!node.is_active) {
-        return { success: false, node_key: cleanKey, started_at: '', error: 'Tehtävä ei ole vielä aktiivinen.' };
-      }
-
-      // Check existing attempt
+      // Check existing attempt first
       const { data: existing } = await sb
         .from('task_attempts')
         .select('*')
@@ -521,34 +527,47 @@ export async function handleStartTask(playerId: string, nodeKey: string): Promis
         .select()
         .single();
 
-      if (error || !created) {
-        return { success: false, node_key: cleanKey, started_at: '', error: 'Aikalaskurin alustus epäonnistui.' };
+      if (!error && created) {
+        inMemoryDb.startTask(playerId, cleanKey);
+        return {
+          success: true,
+          node_key: cleanKey,
+          started_at: created.started_at,
+          startedAt: created.started_at,
+          already_started: false,
+          is_completed: false,
+          isCompleted: false,
+        };
       }
-
-      return {
-        success: true,
-        node_key: cleanKey,
-        started_at: created.started_at,
-        startedAt: created.started_at,
-        already_started: false,
-        is_completed: false,
-        isCompleted: false,
-      };
     } catch {
-      // Fallback
+      // Fallback to inMemoryDb
     }
   }
 
-  return inMemoryDb.startTask(playerId, cleanKey);
+  const memResult = inMemoryDb.startTask(playerId, cleanKey);
+  if (!memResult.success) {
+    const nowIso = new Date().toISOString();
+    return {
+      success: true,
+      node_key: cleanKey,
+      started_at: nowIso,
+      startedAt: nowIso,
+      already_started: false,
+      is_completed: false,
+      isCompleted: false,
+    };
+  }
+  return memResult;
 }
 
 export async function handleCheckCode(
   playerId: string,
   nodeKey: string,
-  inputCode: string
+  inputCode: string,
+  clientStartedAt?: string,
+  playerName?: string
 ): Promise<CheckCodeResponse> {
   const cleanKey = nodeKey.trim().toUpperCase();
-  const cleanInput = inputCode.trim().toUpperCase().replace(/\s+/g, '');
   const sb = getSupabaseServerClient();
 
   if (sb) {
@@ -559,11 +578,7 @@ export async function handleCheckCode(
         .eq('node_key', cleanKey)
         .maybeSingle();
 
-      if (!node) {
-        return { success: false, message: 'Tuntematon anomalia.' };
-      }
-
-      if (!isNodeCodeValid(cleanKey, inputCode, node.secret_code)) {
+      if (!isNodeCodeValid(cleanKey, inputCode, node?.secret_code)) {
         return {
           success: false,
           message: 'Virheellinen purkukoodi. Tarkista vihjeet ja yritä uudelleen!',
@@ -589,11 +604,16 @@ export async function handleCheckCode(
       }
 
       const completedAt = new Date();
-      const startTime = attempt ? new Date(attempt.started_at).getTime() : completedAt.getTime() - 30000;
+      const parsedClientStart = clientStartedAt ? new Date(clientStartedAt).getTime() : NaN;
+      const startTime = attempt
+        ? new Date(attempt.started_at).getTime()
+        : !isNaN(parsedClientStart)
+        ? parsedClientStart
+        : completedAt.getTime() - 30000;
       const durationSeconds = Math.max(1, Math.round((completedAt.getTime() - startTime) / 1000));
 
       if (!attempt) {
-        const { data: newAttempt } = await sb
+        const { data: newAttempt, error: insError } = await sb
           .from('task_attempts')
           .insert({
             player_id: playerId,
@@ -606,6 +626,9 @@ export async function handleCheckCode(
           })
           .select()
           .single();
+        if (insError) {
+          return inMemoryDb.checkCode(playerId, cleanKey, inputCode, clientStartedAt, playerName);
+        }
         attempt = newAttempt;
       } else {
         await sb
@@ -675,7 +698,7 @@ export async function handleCheckCode(
     }
   }
 
-  return inMemoryDb.checkCode(playerId, cleanKey, inputCode);
+  return inMemoryDb.checkCode(playerId, cleanKey, inputCode, clientStartedAt, playerName);
 }
 
 export async function handleToggleNode(
