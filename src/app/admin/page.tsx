@@ -39,17 +39,15 @@ export default function AdminPage() {
   const [uploadingNode, setUploadingNode] = useState<string | null>(null);
   const [previewNode, setPreviewNode] = useState<string | null>(null);
 
-  // Load stored PIN if any
+  // Aina kun /admin avataan, tyhjennetään vanha istuntomuisti ja vaaditaan PIN-koodi (1888)
   useEffect(() => {
-    const stored = sessionStorage.getItem('varila_admin_pin');
-    if (stored) {
-      setAdminPin(stored);
-      verifyPin(stored);
-    }
+    sessionStorage.removeItem('varila_admin_pin');
+    setIsAuthenticated(false);
+    setAdminPin('');
   }, []);
 
   const fetchStats = useCallback(async (pinOverride?: string) => {
-    const activePin = pinOverride ?? adminPin ?? sessionStorage.getItem('varila_admin_pin') ?? '';
+    const activePin = pinOverride ?? adminPin ?? '';
     try {
       const [nodesRes, leadRes] = await Promise.all([
         fetch(`/api/admin/toggle-node?pin=${encodeURIComponent(activePin)}`),
@@ -60,7 +58,6 @@ export default function AdminPage() {
         const nodesData = await nodesRes.json();
         setNodes(nodesData);
       } else if (nodesRes.status === 401) {
-        sessionStorage.removeItem('varila_admin_pin');
         setIsAuthenticated(false);
         setAuthError('Virheellinen järjestäjän PIN-koodi! Pääsy evätty.');
       }
@@ -77,18 +74,25 @@ export default function AdminPage() {
   const verifyPin = async (pinToTest: string) => {
     setIsLoading(true);
     setAuthError(null);
+
+    if (pinToTest.trim() !== '1888') {
+      soundFX.playFailure();
+      setIsAuthenticated(false);
+      setIsLoading(false);
+      setAuthError('Virheellinen järjestäjän PIN-koodi! Pääsy evätty.');
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/admin/toggle-node?pin=${encodeURIComponent(pinToTest)}`);
+      const res = await fetch(`/api/admin/toggle-node?pin=${encodeURIComponent(pinToTest.trim())}`);
       if (res.ok) {
         const data = await res.json();
         setNodes(data);
         setIsAuthenticated(true);
-        sessionStorage.setItem('varila_admin_pin', pinToTest);
         soundFX.playSuccess();
-        fetchStats(pinToTest);
+        fetchStats(pinToTest.trim());
       } else {
         soundFX.playFailure();
-        sessionStorage.removeItem('varila_admin_pin');
         setIsAuthenticated(false);
         const errData = await res.json().catch(() => ({}));
         setAuthError(errData.error || 'Virheellinen järjestäjän PIN-koodi! Pääsy evätty.');
