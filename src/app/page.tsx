@@ -117,8 +117,24 @@ export default function TerminalPage() {
       }
       if (leadRes.ok) {
         const leadData = await leadRes.json();
-        setPlayers(leadData.players || []);
+        const serverPlayers: Player[] = leadData.players || [];
+        setPlayers(serverPlayers);
         setRecentSolves(leadData.recent_solves || []);
+
+        // Jos peli on nollattu palvelimella eikä localStoragessa olevaa pelaajaa enää löydy, kirjaudutaan ulos
+        if (typeof window !== 'undefined') {
+          const storedId = localStorage.getItem('varila_player_id');
+          if (storedId && !serverPlayers.some((p) => p.id === storedId)) {
+            localStorage.removeItem('varila_player_id');
+            localStorage.removeItem('varila_player_name');
+            localStorage.removeItem('varila_player_pin');
+            setActivePlayerId(null);
+            setActivePlayerName('');
+            setPlayerAttempts([]);
+            setCanCloseRegistration(false);
+            setRegistrationOpen(true);
+          }
+        }
       }
     } catch (err) {
       console.error('Fetch error:', err);
@@ -701,6 +717,18 @@ export default function TerminalPage() {
       <PlayerRegistrationModal
         isOpen={registrationOpen}
         onRegistered={handlePlayerRegistered}
+        onLogout={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('varila_player_id');
+            localStorage.removeItem('varila_player_name');
+            localStorage.removeItem('varila_player_pin');
+          }
+          setActivePlayerId(null);
+          setActivePlayerName('');
+          setPlayerAttempts([]);
+          setCanCloseRegistration(false);
+          setRegistrationOpen(true);
+        }}
         currentPlayerName={activePlayerName}
         canClose={canCloseRegistration}
         onClose={() => setRegistrationOpen(false)}

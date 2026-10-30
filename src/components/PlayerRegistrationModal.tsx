@@ -8,6 +8,7 @@ import { Player } from '@/lib/types';
 interface Props {
   isOpen: boolean;
   onRegistered: (player: Player) => void;
+  onLogout?: () => void;
   currentPlayerName?: string;
   canClose?: boolean;
   onClose?: () => void;
@@ -16,6 +17,7 @@ interface Props {
 export const PlayerRegistrationModal: React.FC<Props> = ({
   isOpen,
   onRegistered,
+  onLogout,
   currentPlayerName = '',
   canClose = false,
   onClose,
@@ -167,13 +169,24 @@ export const PlayerRegistrationModal: React.FC<Props> = ({
           </button>
 
           {canClose && onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full text-center text-xs text-[#a88456] hover:text-[#fbbf24] py-1 font-serif underline"
-            >
-              Sulje ikkuna
-            </button>
+            <div className="flex items-center justify-between pt-2 border-t border-[#5c3e21]/50">
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="text-xs text-red-400 hover:text-red-300 py-1 font-serif underline"
+                >
+                  Kirjaudu ulos ({currentPlayerName})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs text-[#a88456] hover:text-[#fbbf24] py-1 font-serif underline ml-auto"
+              >
+                Sulje ikkuna
+              </button>
+            </div>
           )}
         </form>
       </div>

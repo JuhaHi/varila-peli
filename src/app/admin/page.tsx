@@ -248,7 +248,12 @@ export default function AdminPage() {
       });
       if (res.ok) {
         soundFX.playSuccess();
-        alert('Peli alustettu onnistuneesti!');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('varila_player_id');
+          localStorage.removeItem('varila_player_name');
+          localStorage.removeItem('varila_player_pin');
+        }
+        alert('Peli ja pelaajat alustettu onnistuneesti!');
         fetchStats();
       } else {
         const errData = await res.json().catch(() => ({}));
