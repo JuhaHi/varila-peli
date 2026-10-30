@@ -63,8 +63,19 @@ export function computeRelativeNodeScores(
   return result;
 }
 
+// Aikakynnys (2026-10-30T13:42:00Z), jota vanhemmat avausleimat tulkitaan lukituiksi,
+// jotta kaikki 11 tehtävää ovat varmasti lukittuina pelin alkaessa.
+const INITIAL_LOCK_EPOCH = new Date('2026-10-30T13:42:00.000Z').getTime();
+
+interface NodeOverrideState {
+  is_active: boolean;
+  unlocked_at: string | null;
+  updated_at: number;
+}
+
 interface SharedMemoryState {
   nodes: GameNode[];
+  nodeOverrides: Record<string, NodeOverrideState>;
   players: Player[];
   attempts: TaskAttempt[];
   resetAt: number;
@@ -76,22 +87,19 @@ const globalForGame = globalThis as unknown as {
 };
 
 if (!globalForGame.__varilaSharedState) {
-  const prevNodes = globalForGame.inMemoryDb?.nodes;
   globalForGame.__varilaSharedState = {
-    nodes: INITIAL_NODES.map((initNode) => {
-      const prev = prevNodes?.find((n) => n.node_key === initNode.node_key);
-      return prev
-        ? {
-            ...initNode,
-            is_active: prev.is_active,
-            unlocked_at: prev.unlocked_at,
-          }
-        : { ...initNode };
-    }),
+    nodes: INITIAL_NODES.map((initNode) => ({
+      ...initNode,
+      is_active: false,
+      unlocked_at: null,
+    })),
+    nodeOverrides: {},
     players: globalForGame.inMemoryDb?.players || JSON.parse(JSON.stringify(INITIAL_PLAYERS)),
     attempts: globalForGame.inMemoryDb?.attempts || [],
-    resetAt: 0,
+    resetAt: INITIAL_LOCK_EPOCH,
   };
+} else if (!globalForGame.__varilaSharedState.nodeOverrides) {
+  globalForGame.__varilaSharedState.nodeOverrides = {};
 }
 
 // In-Memory Database for local dev & serverless fallback (all route bundles share __varilaSharedState)
@@ -101,6 +109,13 @@ class InMemoryGameDatabase {
   }
   public set nodes(val: GameNode[]) {
     globalForGame.__varilaSharedState!.nodes = val;
+  }
+
+  public get nodeOverrides(): Record<string, NodeOverrideState> {
+    return globalForGame.__varilaSharedState!.nodeOverrides;
+  }
+  public set nodeOverrides(val: Record<string, NodeOverrideState>) {
+    globalForGame.__varilaSharedState!.nodeOverrides = val;
   }
 
   public get players(): Player[] {
@@ -356,19 +371,47 @@ class InMemoryGameDatabase {
   }
 
   public toggleNode(nodeKey: string, isActive: boolean, adminPin: string): { success: boolean; error?: string; node?: GameNode } {
-    if (adminPin !== ADMIN_PIN) {
+    if (!verifyAdminPin(adminPin)) {
       return { success: false, error: 'Virheellinen Admin PIN-koodi.' };
     }
 
-    const node = this.getNode(nodeKey);
+    const cleanKey = nodeKey.trim().toUpperCase();
+    const node = this.getNode(cleanKey);
     if (!node) {
       return { success: false, error: 'Tehtävää ei löydy.' };
     }
 
+    const unlockedAt = isActive ? new Date().toISOString() : null;
     node.is_active = isActive;
-    node.unlocked_at = isActive ? new Date().toISOString() : null;
+    node.unlocked_at = unlockedAt;
 
-    return { success: true, node };
+    this.nodeOverrides[cleanKey] = {
+      is_active: isActive,
+      unlocked_at: unlockedAt,
+      updated_at: Date.now(),
+    };
+
+    return { success: true, node: { ...node } };
+  }
+
+  public syncNodeStates(clientStates?: Record<string, boolean>) {
+    if (!clientStates || typeof clientStates !== 'object') return;
+    for (const [rawKey, activeVal] of Object.entries(clientStates)) {
+      const cleanKey = rawKey.trim().toUpperCase();
+      const node = this.getNode(cleanKey);
+      if (!node) continue;
+      if (this.nodeOverrides[cleanKey] === undefined) {
+        const isActive = Boolean(activeVal);
+        const unlockedAt = isActive ? node.unlocked_at || new Date().toISOString() : null;
+        node.is_active = isActive;
+        node.unlocked_at = unlockedAt;
+        this.nodeOverrides[cleanKey] = {
+          is_active: isActive,
+          unlocked_at: unlockedAt,
+          updated_at: Date.now(),
+        };
+      }
+    }
   }
 
   public updateNodeVideo(nodeKey: string, videoUrl: string, adminPin: string): { success: boolean; error?: string; node?: GameNode } {
@@ -451,7 +494,16 @@ class InMemoryGameDatabase {
   }
 
   public resetAll() {
-    this.nodes.splice(0, this.nodes.length, ...JSON.parse(JSON.stringify(INITIAL_NODES)));
+    this.nodes.splice(
+      0,
+      this.nodes.length,
+      ...INITIAL_NODES.map((n) => ({
+        ...n,
+        is_active: false,
+        unlocked_at: null,
+      }))
+    );
+    this.nodeOverrides = {};
     this.players.splice(0, this.players.length);
     this.attempts.splice(0, this.attempts.length);
     this.resetAt = Date.now();
@@ -750,36 +802,57 @@ export async function handleToggleNode(
   isActive: boolean,
   adminPin: string
 ): Promise<{ success: boolean; error?: string; node?: GameNode }> {
-  if (adminPin !== ADMIN_PIN) {
+  if (!verifyAdminPin(adminPin)) {
     return { success: false, error: 'Virheellinen Admin PIN-koodi.' };
   }
 
   const cleanKey = nodeKey.trim().toUpperCase();
-  const sb = getSupabaseServerClient();
+  const memResult = inMemoryDb.toggleNode(cleanKey, isActive, adminPin.trim());
+  if (!memResult.success || !memResult.node) {
+    return memResult;
+  }
 
+  const sb = getSupabaseServerClient();
   if (sb) {
     try {
+      const unlockedAt = memResult.node.unlocked_at;
       const { data, error } = await sb
         .from('game_nodes')
         .update({
           is_active: isActive,
-          unlocked_at: isActive ? new Date().toISOString() : null,
+          unlocked_at: unlockedAt,
         })
         .eq('node_key', cleanKey)
         .select()
-        .single();
+        .maybeSingle();
 
-      if (error || !data) {
-        return { success: false, error: error?.message || 'Päivitys epäonnistui.' };
+      if (!error && data) {
+        return { success: true, node: { ...memResult.node, is_active: isActive, unlocked_at: unlockedAt } };
       }
 
-      return { success: true, node: data };
+      // Jos riviä ei vielä ollut Supabasessa, yritetään upsertata solmu
+      await sb
+        .from('game_nodes')
+        .upsert(
+          {
+            node_key: memResult.node.node_key,
+            title: memResult.node.title,
+            target_person: memResult.node.target_person,
+            secret_code: memResult.node.secret_code || '1888',
+            video_url: memResult.node.video_url,
+            is_active: isActive,
+            unlocked_at: unlockedAt,
+            story_text: memResult.node.story_text || '',
+            role_hint: memResult.node.role_hint || '',
+          },
+          { onConflict: 'node_key' }
+        );
     } catch {
-      // Fallback
+      // Fallback to inMemoryDb
     }
   }
 
-  return inMemoryDb.toggleNode(cleanKey, isActive, adminPin);
+  return memResult;
 }
 
 export async function handleUpdateNodeVideo(
@@ -787,12 +860,13 @@ export async function handleUpdateNodeVideo(
   videoUrl: string,
   adminPin: string
 ): Promise<{ success: boolean; error?: string; node?: GameNode }> {
-  if (adminPin !== ADMIN_PIN) {
+  if (!verifyAdminPin(adminPin)) {
     return { success: false, error: 'Virheellinen Admin PIN-koodi.' };
   }
 
   const cleanKey = nodeKey.trim().toUpperCase();
   const cleanUrl = videoUrl.trim();
+  const memRes = inMemoryDb.updateNodeVideo(cleanKey, cleanUrl, adminPin.trim());
   const sb = getSupabaseServerClient();
 
   if (sb) {
@@ -802,10 +876,9 @@ export async function handleUpdateNodeVideo(
         .update({ video_url: cleanUrl })
         .eq('node_key', cleanKey)
         .select()
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
-        inMemoryDb.updateNodeVideo(cleanKey, cleanUrl, adminPin);
         return { success: true, node: data };
       }
     } catch {
@@ -813,11 +886,20 @@ export async function handleUpdateNodeVideo(
     }
   }
 
-  return inMemoryDb.updateNodeVideo(cleanKey, cleanUrl, adminPin);
+  return memRes;
 }
 
-export async function getGameNodes(includeSecrets = false): Promise<GameNode[]> {
+export async function getGameNodes(
+  includeSecrets = false,
+  clientNodeStates?: Record<string, boolean>
+): Promise<GameNode[]> {
+  if (clientNodeStates) {
+    inMemoryDb.syncNodeStates(clientNodeStates);
+  }
+
   const sb = getSupabaseServerClient();
+  const minUnlockEpoch = Math.max(INITIAL_LOCK_EPOCH, inMemoryDb.resetAt || 0);
+
   if (sb) {
     try {
       const { data, error } = await sb
@@ -828,6 +910,21 @@ export async function getGameNodes(includeSecrets = false): Promise<GameNode[]> 
       if (!error && data && data.length > 0) {
         return (data as unknown as GameNode[]).map((node) => {
           const copy = { ...node };
+          const cleanKey = copy.node_key.trim().toUpperCase();
+          const override = inMemoryDb.nodeOverrides[cleanKey];
+
+          if (override !== undefined) {
+            copy.is_active = override.is_active;
+            copy.unlocked_at = override.unlocked_at;
+          } else if (copy.is_active) {
+            // Varmistetaan, että vanhat (ennen pelin nollausta/aloitusta tehdyt) avaukset ovat lukittuja
+            const unlockedTime = copy.unlocked_at ? new Date(copy.unlocked_at).getTime() : 0;
+            if (!unlockedTime || unlockedTime < minUnlockEpoch) {
+              copy.is_active = false;
+              copy.unlocked_at = null;
+            }
+          }
+
           if (
             !copy.video_url ||
             copy.video_url.includes('pub-xxx.r2.dev') ||
@@ -963,6 +1060,10 @@ export async function handleResetGame(adminPin: string): Promise<{ success: bool
     try {
       await sb.from('task_attempts').delete().neq('node_key', '');
       await sb.from('players').delete().neq('name', '');
+      await sb
+        .from('game_nodes')
+        .update({ is_active: false, unlocked_at: null })
+        .neq('node_key', '');
     } catch {
       // Fallback
     }

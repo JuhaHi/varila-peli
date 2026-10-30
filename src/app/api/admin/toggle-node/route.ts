@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { handleToggleNode, getGameNodes, verifyAdminPin } from '@/lib/gameServer';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

@@ -108,8 +108,22 @@ export default function AdminPage() {
       ]);
 
       if (nodesRes.ok) {
-        const nodesData = await nodesRes.json();
-        setNodes(nodesData);
+        const nodesData: GameNode[] = await nodesRes.json();
+        let savedStates: Record<string, boolean> = {};
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('varila_node_states');
+            if (raw) savedStates = JSON.parse(raw);
+          } catch {
+            // ignore
+          }
+        }
+        const mergedNodes = nodesData.map((n) =>
+          savedStates[n.node_key] !== undefined
+            ? { ...n, is_active: Boolean(savedStates[n.node_key]) }
+            : n
+        );
+        setNodes(mergedNodes);
       } else if (nodesRes.status === 401) {
         setIsAuthenticated(false);
         setAuthError('Virheellinen järjestäjän PIN-koodi! Pääsy evätty.');
@@ -191,10 +205,28 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         soundFX.playSuccess();
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('varila_node_states');
+            const states: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+            states[nodeKey] = newStatus;
+            localStorage.setItem('varila_node_states', JSON.stringify(states));
+          } catch {
+            // ignore
+          }
+        }
         setNodes((prev) =>
-          prev.map((n) => (n.node_key === nodeKey ? { ...n, is_active: newStatus } : n))
+          prev.map((n) =>
+            n.node_key === nodeKey
+              ? {
+                  ...n,
+                  is_active: newStatus,
+                  unlocked_at: newStatus ? new Date().toISOString() : null,
+                }
+              : n
+          )
         );
-        setActionMessage(`Tehtävä ${nodeKey} ${newStatus ? 'AKTIVOITU' : 'LUKITTU'}!`);
+        setActionMessage(`Tehtävä ${nodeKey} ${newStatus ? 'AKTIVOITU RYHMÄLLE' : 'LUKITTU'}!`);
         setTimeout(() => setActionMessage(null), 4000);
       } else {
         soundFX.playFailure();

@@ -53,8 +53,8 @@ export const INITIAL_NODES: GameNode[] = [
     target_person: 'Insinööri / Myyntipäällikkö',
     secret_code: '382NM',
     video_url: '/videos/node01.mp4',
-    is_active: true, // Node 1 open by default so first puzzle is immediately playable
-    unlocked_at: new Date().toISOString(),
+    is_active: false, // Kaikki tehtävät ovat alussa lukittuina – Admin avaa kun peli alkaa
+    unlocked_at: null,
     story_text: 'Lokakuun yönä 1888 Nuoramoisten kappalainen tilasi konepajalta kolmipulttisen terässalvan, jota yksikään tiirikka ei pystyisi avaamaan. Arkistosta löytynyt sinikopio paljastaa rattaiston hammasluvut ja karkaistun pääakselin leikkauslujuuden – vain täsmälleen oikea vääntömomentti murtaa lukituksen rikkomatta kirstun sisuksia.',
     role_hint: 'Laske hammasrattaiden välityssuhteesta ja ensiömomentista pääakselin murtomomentti (Nm).',
   },

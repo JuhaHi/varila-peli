@@ -161,8 +161,22 @@ export default function TerminalPage() {
     setIsLoading(true);
     try {
       const syncPayload = getLocalSyncPayload();
+      let savedNodeStates: Record<string, boolean> | undefined = undefined;
+      if (typeof window !== 'undefined') {
+        try {
+          const rawStates = localStorage.getItem('varila_node_states');
+          if (rawStates) savedNodeStates = JSON.parse(rawStates);
+        } catch {
+          // ignore
+        }
+      }
+
       const [nodesRes, leadRes] = await Promise.all([
-        fetch('/api/nodes'),
+        fetch('/api/nodes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nodeStates: savedNodeStates }),
+        }),
         fetch('/api/leaderboard', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -172,7 +186,14 @@ export default function TerminalPage() {
 
       if (nodesRes.ok) {
         const nodesData: GameNode[] = await nodesRes.json();
-        setNodes(nodesData);
+        const mergedNodes = savedNodeStates
+          ? nodesData.map((n) =>
+              savedNodeStates![n.node_key] !== undefined
+                ? { ...n, is_active: Boolean(savedNodeStates![n.node_key]) }
+                : n
+            )
+          : nodesData;
+        setNodes(mergedNodes);
       }
       if (leadRes.ok) {
         const leadData = await leadRes.json();
@@ -291,10 +312,23 @@ export default function TerminalPage() {
     .map((a) => a.node_key);
 
   // Active current node: the selected node or first active unsolved node
+  const selectedNodeObj = nodes.find((n) => n.node_key === selectedNodeKey);
+  const firstActiveUnsolved = nodes.find(
+    (n) => n.is_active && !solvedNodeKeys.includes(n.node_key)
+  );
   const activeNode: GameNode | undefined =
-    nodes.find((n) => n.node_key === selectedNodeKey) ||
-    nodes.find((n) => n.is_active && !solvedNodeKeys.includes(n.node_key)) ||
-    nodes[0];
+    selectedNodeObj && selectedNodeObj.is_active
+      ? selectedNodeObj
+      : firstActiveUnsolved || selectedNodeObj || nodes[0];
+
+  // Auto-poll every 6s when waiting for Admin to unlock a task
+  useEffect(() => {
+    if (activeNode?.is_active) return;
+    const pollTimer = setInterval(() => {
+      fetchData();
+    }, 6000);
+    return () => clearInterval(pollTimer);
+  }, [activeNode?.is_active, fetchData]);
 
   const currentAttempt = playerAttempts.find(
     (a) =>
@@ -651,11 +685,23 @@ export default function TerminalPage() {
                   <Lock className="w-6 h-6 text-[#a88456]" />
                 </div>
                 <h3 className="font-cinzel text-base sm:text-lg font-bold text-[#fef3c7] uppercase">
-                  {activeNode?.title || 'LUKITTU ANOMALIA'}
+                  {activeNode?.title || 'LUKITTU ANOMALIA'} ({activeNode?.node_key || 'ODOTTAA'})
                 </h3>
                 <p className="text-xs text-[#a88456] max-w-md mx-auto">
-                  Tätä tehtävää ei ole vielä aktivoitu. Järjestäjä avaa tehtäviä satunnaisesti ja ilmoittaa niistä <strong>WhatsApp-ryhmässä</strong>!
+                  Kaikki tehtävät ovat alussa lukittuina. Järjestäjä (Admin) avaa tehtävät ohjauspaneelista pelin alkaessa ja ilmoittaa niistä <strong>WhatsApp-ryhmässä</strong>!
                 </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      soundFX.playKeyClick();
+                      fetchData();
+                    }}
+                    className="bg-[#23180f] hover:bg-[#312114] text-[#fbbf24] border border-[#d4af37] text-xs font-cinzel font-bold px-4 py-2 rounded-lg inline-flex items-center gap-2 transition"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Päivitä tehtävätilanne</span>
+                  </button>
+                </div>
               </div>
             ) : (!currentAttempt && !isCurrentSolved) ? (
               // VAIHE 1, 2 & 3: TASKGATE (Katsotaan video ensin rauhassa ilman kellon tikitystä)
