@@ -79,7 +79,7 @@ export const PlayerRegistrationModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-serif">
-      <div className="parchment-card border-2 border-[#d4af37] rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-[0_0_60px_rgba(0,0,0,0.95)] relative animate-fadeIn">
+      <div className="parchment-card border-2 border-[#d4af37] rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-[0_0_60px_rgba(0,0,0,0.95)] relative animate-fadeIn mx-auto">
         {/* Top Seal */}
         <div className="flex justify-center mb-4">
           <div className="wax-seal w-14 h-14 font-gothic text-base font-bold shadow-2xl">

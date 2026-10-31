@@ -648,9 +648,9 @@ export default function TerminalPage() {
 
       {/* Floating Notification Banner */}
       {notification && (
-        <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 w-11/12 max-w-lg font-serif animate-bounce">
+        <div className="fixed top-16 inset-x-0 z-50 flex justify-center px-4 pointer-events-none font-serif">
           <div
-            className={`p-4 rounded-xl border shadow-2xl flex items-center gap-3 text-xs font-bold ${
+            className={`w-full max-w-md p-4 rounded-xl border shadow-2xl flex items-center gap-3 text-xs font-bold pointer-events-auto animate-fadeIn ${
               notification.type === 'bonus'
                 ? 'bg-[#2b1706]/95 text-[#fef3c7] border-[#d4af37] shadow-[0_0_30px_rgba(212,175,55,0.6)]'
                 : notification.type === 'success'
