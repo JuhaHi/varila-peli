@@ -443,6 +443,17 @@ export default function AdminPage() {
   const handleUploadVideoFile = async (nodeKey: string, file?: File | null) => {
     if (!file) return;
     soundFX.playKeyClick();
+
+    // Vercelin Serverless Function -raja tiedoston siirrolle on 4.5 MB
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    if (file.size > 4.5 * 1024 * 1024) {
+      soundFX.playFailure();
+      alert(
+        `⚠️ Tiedosto on liian suuri suoraan Verceliin ladattavaksi (${sizeMb} MB, raja 4.5 MB).\n\nRatkaisu:\nKäytä Cloudflare R2 -linkkiä: Liitä videon suora URL-osoite tekstikenttään ja paina "Tallenna URL". Se tallentuu heti ilman kokorajoitusta!`
+      );
+      return;
+    }
+
     setUploadingNode(nodeKey);
     try {
       const formData = new FormData();
@@ -454,6 +465,15 @@ export default function AdminPage() {
         method: 'POST',
         body: formData,
       });
+
+      if (res.status === 413) {
+        soundFX.playFailure();
+        alert(
+          `Palvelimen kokorajoitus (4.5 MB) ylittyi. Liitä videon suora URL-osoite tekstikenttään ja paina "Tallenna URL".`
+        );
+        return;
+      }
+
       const data = await res.json();
       if (res.ok && data.success) {
         soundFX.playSuccess();
@@ -462,7 +482,7 @@ export default function AdminPage() {
         );
         setVideoDrafts((prev) => ({ ...prev, [nodeKey]: data.videoUrl }));
         setActionMessage(
-          `Video ladattu tehtävälle ${nodeKey} -> ${data.videoUrl} (muista git push jos julkaiset Verceliin)`
+          `Video ladattu tehtävälle ${nodeKey} -> ${data.videoUrl}`
         );
         setTimeout(() => setActionMessage(null), 5000);
       } else {
@@ -471,7 +491,9 @@ export default function AdminPage() {
       }
     } catch {
       soundFX.playFailure();
-      alert('Yhteysvirhe videotiedoston latauksessa.');
+      alert(
+        'Yhteysvirhe videotiedoston latauksessa. Tiedostokoko saattaa ylittää Vercelin 4.5 MB rajan. Liitä suora videolinkki tekstikenttään ja paina "Tallenna URL".'
+      );
     } finally {
       setUploadingNode(null);
     }
